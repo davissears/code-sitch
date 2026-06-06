@@ -80,7 +80,7 @@ thead th{position:sticky;top:0;background:var(--panel2);z-index:2;
   letter-spacing:.6px;padding:11px 14px;border-bottom:1px solid var(--line);}
 .c-status{width:96px;}
 .c-project{width:170px;}
-.c-msgs{width:64px;text-align:right;}
+.c-msgs{width:78px;text-align:right;}
 .c-time{width:130px;}
 .c-action{width:104px;}
 tbody tr{border-bottom:1px solid var(--line);cursor:pointer;transition:background .1s;}

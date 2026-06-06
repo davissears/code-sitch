@@ -55,8 +55,9 @@ function renderUsage() {
 
   const table = el("table", "usage-table");
   const thead = el("thead"), htr = el("tr");
-  htr.append(el("th", "up", "Period"), el("th", "num", "Chats"),
-             el("th", "num", "Messages sent"), el("th", "num", "Tokens"));
+  const thPrompts = el("th", "num", "Prompts sent");
+  thPrompts.title = "Prompts you typed (excludes Claude's replies and tool-use steps)";
+  htr.append(el("th", "up", "Period"), el("th", "num", "Chats"), thPrompts, el("th", "num", "Tokens"));
   thead.append(htr);
   const tbody = el("tbody");
   for (const r of s.rows) {
@@ -270,7 +271,7 @@ function render() {
     } else {
       const meta = el("div", "metaline");
       if (s.branch && s.branch !== "HEAD") { meta.append(el("span", "branch", "⎇ " + s.branch)); meta.append(el("span", "sep", "·")); }
-      meta.append(el("span", null, `${s.messages} msg${s.messages === 1 ? "" : "s"}`));
+      meta.append(el("span", null, `${s.messages} repl${s.messages === 1 ? "y" : "ies"}`));
       if (s.last_prompt) { meta.append(el("span", "sep", "·")); meta.append(el("span", null, "“" + truncate(s.last_prompt, 60) + "”")); }
       tdM.append(meta);
     }
@@ -281,8 +282,9 @@ function render() {
     pj.title = s.cwd || "";
     tdP.append(pj);
 
-    // msgs
+    // replies (Claude's response events, incl. tool-use steps — not your prompts)
     const tdC = el("td", "c-msgs msgs", String(s.messages || 0));
+    tdC.title = "Claude responses (incl. tool-use steps)";
 
     // time
     const tdT = el("td", "c-time");
