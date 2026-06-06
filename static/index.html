@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code · Situation Monitor</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="spark">✳</span>
+      <div>
+        <h1>Situation Monitor</h1>
+        <div class="subtitle">every Claude Code conversation on this machine</div>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="usage" id="usage"></div>
+
+  <div class="searchwrap">
+    <div class="searchbox">
+      <span class="search-icon">⌕</span>
+      <input id="search" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Filter instantly by keyword…   ↵ Enter for AI search">
+      <span class="search-kbd">type to filter · ↵ AI search</span>
+    </div>
+    <label class="opt" title="Resume sessions with --dangerously-skip-permissions, matching how you launch Claude">
+      <input type="checkbox" id="optDangerous"> skip&nbsp;permissions on resume
+    </label>
+  </div>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <div class="tablewrap">
+    <table id="grid">
+      <thead>
+        <tr>
+          <th class="c-status">Status</th>
+          <th class="c-main">Summary</th>
+          <th class="c-project">Project</th>
+          <th class="c-msgs">Msgs</th>
+          <th class="c-time">Last updated</th>
+          <th class="c-action"></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="empty" class="empty hidden"></div>
+  </div>
+
+  <footer class="foot">
+    <span id="footstatus"></span>
+    <span class="legend">
+      <span class="dot live"></span> active → click to focus window &nbsp;·&nbsp;
+      <span class="dot idle"></span> inactive → click to resume in new terminal
+    </span>
+  </footer>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script src="/app.js"></script>
+</body>
+</html>
