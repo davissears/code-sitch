@@ -49,6 +49,75 @@ def cwd_of_pid(pid):
     return None
 
 
+# --------------------------------------------------------------------------- #
+# working vs. waiting — read it straight off the terminal tab title.
+#
+# Claude Code animates the tab/window title while it is generating: the title is
+# prefixed with a Braille spinner glyph (U+2800–U+28FF, the dots cycle). When it
+# finishes and is waiting for your next prompt, the prefix is a steady ✳ sparkle.
+# So the leading glyph of the tab title IS Claude's own "am I busy" state — we
+# just read it back. We key this by tty (which `ps` reports authoritatively per
+# process), so it stays correct even when several sessions share one cwd and the
+# session→pid assignment above is only best-effort.
+# --------------------------------------------------------------------------- #
+_IDLE_GLYPH = "✳"          # ✳ — Claude is waiting for your input
+
+
+def _classify_glyph(title):
+    """working | waiting | None, from the leading glyph of a tab title."""
+    t = (title or "").strip()
+    if not t:
+        return None
+    c = ord(t[0])
+    if 0x2800 <= c <= 0x28FF:    # Braille spinner → actively generating
+        return "working"
+    if t[0] == _IDLE_GLYPH:      # steady sparkle → awaiting your prompt
+        return "waiting"
+    return None
+
+
+_TAB_TITLES_OSA = '''tell application "Terminal"
+set out to ""
+repeat with w in windows
+set tlist to tabs of w
+repeat with i from 1 to count of tlist
+set t to item i of tlist
+try
+set ttl to custom title of t
+on error
+set ttl to ""
+end try
+if ttl is "" then set ttl to name of t
+set out to out & (tty of t) & "::CSM::" & ttl & linefeed
+end repeat
+end repeat
+end tell
+return out'''
+
+
+def terminal_tab_activity():
+    """
+    Map tty-basename -> "working"|"waiting" by reading Terminal.app tab titles.
+
+    Returns {} when Terminal isn't running (we never launch it just to ask) or
+    when the platform/terminal can't be scripted — callers degrade to a plain
+    "active" badge in that case.
+    """
+    # only ask if Terminal.app is already running — never launch it just to peek
+    if "Terminal.app" not in _run(["ps", "-Axo", "comm"]):
+        return {}
+    out = _run(["osascript", "-e", _TAB_TITLES_OSA], timeout=4)
+    activity = {}
+    for ln in out.splitlines():
+        if "::CSM::" not in ln:
+            continue
+        tty, title = ln.split("::CSM::", 1)
+        st = _classify_glyph(title)
+        if st:
+            activity[tty.rsplit("/", 1)[-1]] = st   # /dev/ttys006 -> ttys006
+    return activity
+
+
 def active_sessions(metas):
     """
     Given parsed session metas (each with cwd + updated mtime), return
@@ -74,6 +143,8 @@ def active_sessions(metas):
     for lst in sessions_by_cwd.values():
         lst.sort(key=lambda m: m["updated"], reverse=True)
 
+    tty_activity = terminal_tab_activity()   # tty -> working|waiting (best effort)
+
     active = {}
     for cwd, plist in by_cwd.items():
         candidates = sessions_by_cwd.get(cwd, [])
@@ -83,6 +154,8 @@ def active_sessions(metas):
                 "pid": proc["pid"],
                 "tty": proc["tty"],
                 "cwd": cwd,
+                # working | waiting | None(unknown, e.g. non-Terminal terminal)
+                "activity": tty_activity.get(proc["tty"]),
             }
     return active
 

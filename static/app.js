@@ -210,8 +210,15 @@ function render() {
   stats.innerHTML = "";
   const live = el("span", "pill");
   live.append(el("span", "dot live"), el("span", null, `${m.active_count || 0} active`));
-  const tot = el("span", "pill", `${m.total || 0} sessions`);
-  stats.append(live, tot);
+  stats.append(live);
+  const working = state.sessions.filter((s) => s.active && s.activity === "working").length;
+  if (working) {
+    const wk = el("span", "pill");
+    wk.append(el("span", "dot live"), el("span", null, `${working} working`));
+    wk.title = "Claude is actively generating in these sessions right now";
+    stats.append(wk);
+  }
+  stats.append(el("span", "pill", `${m.total || 0} sessions`));
   const en = m.enrich || {};
   if (m.online === false) {
     const off = el("span", "pill offline", "AI offline");
@@ -251,13 +258,20 @@ function render() {
   const terms = state.mode === "instant" ? tokens(state.filter) : [];
 
   for (const s of list) {
-    const tr = el("tr", s.active ? "active" : "");
+    // three live states (working / waiting / active-unknown) plus inactive
+    const act = s.active ? (s.activity || "active") : "inactive";
+    const tr = el("tr", s.active ? "active state-" + act : "");
     tr.onclick = () => activate(s);
 
     // status
     const tdS = el("td", "c-status");
     const st = el("span", "status");
-    st.append(el("span", "dot " + (s.active ? "live" : "idle")), el("span", null, s.active ? "active" : "idle"));
+    const LABEL = { working: "working", waiting: "waiting", active: "active", inactive: "inactive" };
+    const DOT = { working: "live", waiting: "wait", active: "live", inactive: "idle" };
+    const dot = el("span", "dot " + DOT[act]);
+    if (act === "waiting") dot.title = "Claude is waiting for your input";
+    else if (act === "working") dot.title = "Claude is working right now";
+    st.append(dot, el("span", null, LABEL[act]));
     tdS.append(st);
 
     // main

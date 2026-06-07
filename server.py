@@ -84,6 +84,9 @@ def session_view(meta, active):
         "updated": meta.get("updated"),
         "messages": meta.get("messages", 0),
         "active": info is not None,
+        # "working" (generating) | "waiting" (awaiting your prompt) | None (running,
+        # but we couldn't read the terminal title). Only meaningful when active.
+        "activity": info.get("activity") if info else None,
         "first_prompt": (meta.get("first_prompt") or "")[:280],
         "last_prompt": (meta.get("last_prompt") or "")[:200],
         "keywords": pool,
