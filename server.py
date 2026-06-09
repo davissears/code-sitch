@@ -247,6 +247,11 @@ class Handler(BaseHTTPRequestHandler):
             info = active.get(sid)
             if not info:
                 return self._send(409, {"ok": False, "detail": "session is no longer active"})
+            meta = INDEX.get(sid)
+            # pass stable identifiers (session id + title) so the window match
+            # doesn't depend on the volatile, animated terminal title.
+            info = {**info, "session_id": sid,
+                    "title": (meta or {}).get("title")}
             return self._send(200, windows.focus_session(info))
 
         if p == "/api/resume":

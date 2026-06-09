@@ -36,8 +36,17 @@ def _as_str(s):
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def _yabai_focus_terminal(window_name):
-    """Best-effort: focus the Terminal yabai window (handles space switching)."""
+def _yabai_focus_terminal(keys):
+    """
+    Best-effort: focus the Terminal yabai window (handles space switching).
+
+    `keys` is a list of stable substrings to look for in a window's title, most
+    specific first (e.g. the session id, then the session title). We match on
+    these rather than the whole title because Terminal titles are volatile — the
+    leading spinner glyph animates and the trailing "▸ <process>" segment changes
+    as Claude spawns subprocesses, so an exact-title compare races and misses.
+    """
+    keys = [k for k in keys if k]
     try:
         out = subprocess.run(["yabai", "-m", "query", "--windows"],
                              capture_output=True, text=True, timeout=4).stdout
@@ -46,9 +55,10 @@ def _yabai_focus_terminal(window_name):
         return False
     terms = [w for w in wins if w.get("app") in ("Terminal", "iTerm2")]
     target = None
-    for w in terms:
-        if window_name and w.get("title") == window_name:
-            target = w
+    for key in keys:                 # try most-specific key first
+        hits = [w for w in terms if key in (w.get("title") or "")]
+        if len(hits) == 1:
+            target = hits[0]
             break
     if target is None and len(terms) == 1:
         target = terms[0]            # unambiguous: only one terminal window
@@ -66,7 +76,7 @@ def _yabai_focus_terminal(window_name):
 # focus an active session by its tty
 # --------------------------------------------------------------------------- #
 def focus_session(info):
-    """info: {tty, pid, cwd}. Returns {ok, method, detail}."""
+    """info: {tty, pid, cwd, session_id?, title?}. Returns {ok, method, detail}."""
     tty = info.get("tty")
     if not tty:
         return {"ok": False, "method": None, "detail": "no tty for session"}
@@ -98,8 +108,10 @@ def focus_session(info):
         return {"ok": False, "method": "applescript",
                 "detail": "no Terminal tab found for %s" % ttypath}
 
-    # hand off to yabai so we land on the right Space, too
-    yb = _yabai_focus_terminal(out)
+    # hand off to yabai so we land on the right Space, too. Match on stable
+    # tokens (session id, then title) rather than `out` — the live window title
+    # animates and would race; `out` is only the last-resort key.
+    yb = _yabai_focus_terminal([info.get("session_id"), info.get("title"), out])
     return {"ok": True,
             "method": "applescript+yabai" if yb else "applescript",
             "detail": "focused %s" % out}
