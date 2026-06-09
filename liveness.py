@@ -76,6 +76,30 @@ def _classify_glyph(title):
     return None
 
 
+def _strip_glyph(title):
+    """Drop a leading spinner/sparkle glyph so what's left is the session title."""
+    t = (title or "").strip()
+    if t and (0x2800 <= ord(t[0]) <= 0x28FF or t[0] == _IDLE_GLYPH):
+        t = t[1:].strip()
+    return t
+
+
+def _titles_match(session_title, tab_title):
+    """
+    True if a session's title and a terminal tab's title refer to the same
+    session. The tab title is the session's own aiTitle, but the terminal
+    truncates it to the window width — so we compare on the common prefix.
+    """
+    a = (session_title or "").strip().lower()
+    b = (tab_title or "").strip().lower()
+    if not a or not b:
+        return False
+    n = min(len(a), len(b))
+    if n < 12:                  # too short to trust — demand an exact match
+        return a == b
+    return a[:n] == b[:n]
+
+
 _TAB_TITLES_OSA = '''tell application "Terminal"
 set out to ""
 repeat with w in windows
@@ -95,47 +119,53 @@ end tell
 return out'''
 
 
-def terminal_tab_activity():
+def terminal_tabs():
     """
-    Map tty-basename -> "working"|"waiting" by reading Terminal.app tab titles.
+    Map tty-basename -> raw tab title for the running Terminal.app.
 
     Returns {} when Terminal isn't running (we never launch it just to ask) or
-    when the platform/terminal can't be scripted — callers degrade to a plain
-    "active" badge in that case.
+    when the platform/terminal can't be scripted — callers degrade gracefully.
     """
     # only ask if Terminal.app is already running — never launch it just to peek
     if "Terminal.app" not in _run(["ps", "-Axo", "comm"]):
         return {}
     out = _run(["osascript", "-e", _TAB_TITLES_OSA], timeout=4)
-    activity = {}
+    tabs = {}
     for ln in out.splitlines():
         if "::CSM::" not in ln:
             continue
         tty, title = ln.split("::CSM::", 1)
-        st = _classify_glyph(title)
-        if st:
-            activity[tty.rsplit("/", 1)[-1]] = st   # /dev/ttys006 -> ttys006
-    return activity
+        tabs[tty.rsplit("/", 1)[-1]] = title.strip()   # /dev/ttys006 -> ttys006
+    return tabs
 
 
 def active_sessions(metas):
     """
     Given parsed session metas (each with cwd + updated mtime), return
-    {session_id: {"pid", "tty", "cwd"}} for sessions that have a live process.
+    {session_id: {"pid", "tty", "cwd", "activity"}} for sessions with a live
+    process.
+
+    Two signals connect a live process to a session:
+      • the terminal tab title — it carries the session's own aiTitle, so it
+        names the session exactly (used first; survives shared directories), and
+      • the working directory — a fallback when the title can't be read (a
+        non-Terminal terminal) or doesn't match.
+
+    Tab titles are the reliable signal: when several sessions share one cwd,
+    cwd+mtime alone can't tell which terminal runs which session, so "focus"
+    could land on the wrong window. Matching on the title fixes that.
     """
     procs = live_claude_procs()
     if not procs:
         return {}
 
-    # group live processes by their resolved cwd
-    by_cwd = {}
     for p in procs:
-        cwd = cwd_of_pid(p["pid"])
-        if not cwd:
-            continue
-        by_cwd.setdefault(cwd, []).append(p)
+        p["cwd"] = cwd_of_pid(p["pid"])
 
-    # sessions per cwd, newest first
+    tabs = terminal_tabs()                       # tty -> raw title
+    tty_activity = {tty: _classify_glyph(t) for tty, t in tabs.items()}
+
+    # sessions per cwd, newest first (for the cwd fallback)
     sessions_by_cwd = {}
     for m in metas:
         if m.get("cwd"):
@@ -143,20 +173,45 @@ def active_sessions(metas):
     for lst in sessions_by_cwd.values():
         lst.sort(key=lambda m: m["updated"], reverse=True)
 
-    tty_activity = terminal_tab_activity()   # tty -> working|waiting (best effort)
-
     active = {}
+    claimed_sessions = set()
+
+    def _record(meta, proc):
+        active[meta["session_id"]] = {
+            "pid": proc["pid"],
+            "tty": proc["tty"],
+            "cwd": proc["cwd"],
+            # working | waiting | None(unknown, e.g. non-Terminal terminal)
+            "activity": tty_activity.get(proc["tty"]),
+        }
+        claimed_sessions.add(meta["session_id"])
+
+    # Pass 1 — match each process to the session named in its terminal tab title.
+    # Restrict candidates to the proc's own cwd so two same-named sessions in
+    # different directories can't cross-match.
+    unmatched = []
+    for proc in procs:
+        text = _strip_glyph(tabs.get(proc["tty"], ""))
+        hits = [m for m in sessions_by_cwd.get(proc["cwd"], [])
+                if m["session_id"] not in claimed_sessions
+                and _titles_match(m.get("title"), text)] if text else []
+        if len(hits) == 1:
+            _record(hits[0], proc)
+        else:
+            unmatched.append(proc)
+
+    # Pass 2 — fallback for processes with no readable/unique title match:
+    # assign the newest still-unclaimed session in the same cwd (best effort).
+    by_cwd = {}
+    for proc in unmatched:
+        if proc["cwd"]:
+            by_cwd.setdefault(proc["cwd"], []).append(proc)
     for cwd, plist in by_cwd.items():
-        candidates = sessions_by_cwd.get(cwd, [])
-        # assign newest sessions to the live procs in this cwd
+        candidates = [m for m in sessions_by_cwd.get(cwd, [])
+                      if m["session_id"] not in claimed_sessions]
         for proc, meta in zip(plist, candidates):
-            active[meta["session_id"]] = {
-                "pid": proc["pid"],
-                "tty": proc["tty"],
-                "cwd": cwd,
-                # working | waiting | None(unknown, e.g. non-Terminal terminal)
-                "activity": tty_activity.get(proc["tty"]),
-            }
+            _record(meta, proc)
+
     return active
 
 
