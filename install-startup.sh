@@ -7,6 +7,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LABEL="com.claude-situation-monitor"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PORT="${CSM_PORT:-8787}"
+HOST="${CSM_HOST:-127.0.0.1}"
 LOG="$HOME/.claude/situation-monitor/server.log"
 
 PY="$(command -v python3 || true)"
@@ -38,6 +39,7 @@ cat > "$PLIST" <<PLIST
     <dict>
         <key>PATH</key><string>$AGENT_PATH</string>
         <key>CSM_PORT</key><string>$PORT</string>
+        <key>CSM_HOST</key><string>$HOST</string>
     </dict>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
@@ -55,6 +57,9 @@ launchctl enable "gui/$UID_NUM/$LABEL"
 launchctl kickstart -k "gui/$UID_NUM/$LABEL" || true
 
 echo "Installed $LABEL"
-echo "  → http://127.0.0.1:$PORT/"
+echo "  → http://$HOST:$PORT/"
 echo "  logs: $LOG"
+if [ "$HOST" != "127.0.0.1" ] && [ ! -s "$HOME/.claude/situation-monitor/token" ] && [ -z "${CSM_TOKEN:-}" ]; then
+  echo "WARNING: bound beyond localhost with no access token — see REMOTE.md."
+fi
 echo "Remove with: ./uninstall-startup.sh"

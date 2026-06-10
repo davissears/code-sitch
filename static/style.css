@@ -122,6 +122,27 @@ mark{background:rgba(217,119,87,.28);color:#ffd9c7;border-radius:3px;padding:0 1
 tr:hover .chip{opacity:1;}
 .chip.focus{color:var(--live);border-color:var(--accent-dim);}
 .chip.resume{color:var(--accent);border-color:var(--accent-dim);}
+.chip.chat{color:var(--muted);margin-right:6px;}
+.chip.chat:hover{color:var(--text);border-color:var(--faint);}
+
+/* touch devices: actions always visible (there is no hover) */
+@media (pointer: coarse) {
+  .chip{opacity:1;}
+}
+/* narrow screens (phone): compact, chat-first layout */
+@media (max-width: 760px) {
+  #app{padding:14px 10px 60px;}
+  .topbar{flex-direction:column;align-items:flex-start;gap:10px;}
+  .stats{flex-wrap:wrap;gap:8px;text-align:left;}
+  .usage{display:block;overflow-x:auto;}
+  .usage-table th,.usage-table td{padding:7px 12px;}
+  th.c-project,td.c-project,th.c-msgs,td.c-msgs,th.c-time,td.c-time{display:none;}
+  .chip{opacity:1;font-size:11px;padding:4px 7px;}
+  .chip.focus,.chip.resume{display:none;}  /* can't reach the Mac's windows from a phone */
+  .chip.chat{margin-right:0;}
+  .searchwrap{flex-wrap:wrap;}
+  .search-kbd{display:none;}
+}
 
 /* states */
 .empty{padding:48px 20px;text-align:center;color:var(--muted);}

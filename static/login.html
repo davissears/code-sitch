@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Situation Monitor · sign in</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root{--bg:#0c0d10;--panel:#15171c;--line:#262a33;--text:#e6e8ed;--muted:#8b929e;
+        --accent:#d97757;--accent-dim:#7a4636;}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:radial-gradient(900px 500px at 70% -10%, #16181f 0%, var(--bg) 55%) fixed;
+       color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+       padding:24px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+        padding:30px 28px;max-width:380px;width:100%;}
+  .spark{font-size:30px;color:var(--accent);filter:drop-shadow(0 0 10px rgba(217,119,87,.4));}
+  h1{font-size:18px;margin:10px 0 4px;}
+  p{color:var(--muted);font-size:13px;margin:0 0 18px;}
+  input{width:100%;padding:13px 14px;font-size:16px;border-radius:10px;border:1px solid var(--line);
+        background:#0f1116;color:var(--text);outline:none;}
+  input:focus{border-color:var(--accent-dim);box-shadow:0 0 0 3px rgba(217,119,87,.12);}
+  button{width:100%;margin-top:12px;padding:13px;font-size:15px;font-weight:600;border:0;
+         border-radius:10px;background:var(--accent);color:#fff;cursor:pointer;}
+  button:active{transform:translateY(1px);}
+  .err{color:#ff9c9c;font-size:13px;margin-top:10px;min-height:18px;}
+</style>
+</head>
+<body>
+  <form class="card" id="f">
+    <div class="spark">✳</div>
+    <h1>Claude Code · Situation Monitor</h1>
+    <p>This monitor is protected. Paste your access token to continue.</p>
+    <input id="t" type="password" placeholder="access token" autocomplete="current-password" autofocus>
+    <button type="submit">Unlock</button>
+    <div class="err" id="e"></div>
+  </form>
+<script>
+document.getElementById("f").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const e = document.getElementById("e");
+  e.textContent = "";
+  try {
+    const r = await fetch("/api/login", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({token: document.getElementById("t").value.trim()}),
+    });
+    if (r.ok) location.reload();
+    else e.textContent = "Wrong token.";
+  } catch { e.textContent = "Connection failed."; }
+});
+</script>
+</body>
+</html>

@@ -5,16 +5,22 @@ server.py — local web server for the Claude Code Situation Monitor.
 Serves a single-page UI plus a small JSON API:
 
   GET  /                 the UI
+  GET  /chat?session=ID  remote chat with one session (phone-friendly)
   GET  /api/sessions     all sessions + live status (sorted newest first)
+  GET  /api/chat         ?session_id&offset      -> chat messages + status
+  POST /api/chat/send    {session_id, text}      -> type into the live session
+  POST /api/login        {token}                 -> auth cookie (remote mode)
   POST /api/focus        {session_id}            -> focus the running window
   POST /api/resume       {session_id, ...}       -> open a new resumed window
   POST /api/search       {query}                 -> agentic relevance search
   POST /api/refresh      force a reindex
 
-Runs entirely on localhost. No third-party dependencies (Python stdlib only).
-Background threads keep the index fresh and enrich sessions with AI keywords.
+Defaults to localhost with no auth. For remote access (e.g. over Tailscale),
+put a secret in ~/.claude/situation-monitor/token (or CSM_TOKEN) and every
+request must present it — see REMOTE.md. Python stdlib only.
 """
 
+import hmac
 import os
 import sys
 import json
@@ -22,11 +28,12 @@ import time
 import threading
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 import sessions
 import liveness
 import windows
+import bridge
 import keywords as kw
 import agentic
 import claude_cli
@@ -36,6 +43,25 @@ STATIC = os.path.join(HERE, "static")
 PORT = int(os.environ.get("CSM_PORT", "8787"))
 HOST = os.environ.get("CSM_HOST", "127.0.0.1")
 ENRICH_LIMIT = int(os.environ.get("CSM_ENRICH_LIMIT", "50"))
+
+TOKEN_FILE = os.path.join(os.path.expanduser("~"), ".claude",
+                          "situation-monitor", "token")
+
+
+def _load_token():
+    """Remote-access secret: CSM_TOKEN env, else the token file. None = no auth."""
+    t = os.environ.get("CSM_TOKEN", "").strip()
+    if t:
+        return t
+    try:
+        with open(TOKEN_FILE) as f:
+            t = f.read().strip()
+        return t or None
+    except OSError:
+        return None
+
+
+TOKEN = _load_token()
 
 INDEX = sessions.SessionIndex()
 ENRICHER = kw.KeywordEnricher(INDEX, limit=ENRICH_LIMIT)
@@ -187,7 +213,7 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write("[csm] %s - %s\n" % (self.address_string(), fmt % args))
 
     # ---- helpers ----
-    def _send(self, code, body, ctype="application/json"):
+    def _send(self, code, body, ctype="application/json", extra=None):
         if isinstance(body, (dict, list)):
             body = json.dumps(body).encode("utf-8")
         elif isinstance(body, str):
@@ -196,11 +222,29 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in (extra or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         try:
             self.wfile.write(body)
         except BrokenPipeError:
             pass
+
+    # ---- auth (only when a token is configured; localhost default = open) ----
+    def _presented_token(self):
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            return auth[7:].strip()
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == "csm_token":
+                return v
+        return ""
+
+    def _authed(self):
+        if not TOKEN:
+            return True
+        return hmac.compare_digest(self._presented_token(), TOKEN)
 
     def _body(self):
         try:
@@ -220,26 +264,86 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- routing ----
     def do_GET(self):
-        p = urlparse(self.path).path
-        if p == "/" or p == "/index.html":
-            return self._static("index.html", "text/html; charset=utf-8")
-        if p == "/app.js":
-            return self._static("app.js", "application/javascript; charset=utf-8")
-        if p == "/style.css":
-            return self._static("style.css", "text/css; charset=utf-8")
+        parsed = urlparse(self.path)
+        p = parsed.path
+        # unauthenticated essentials: favicon + health probe
         if p == "/favicon.svg":
             return self._static("favicon.svg", "image/svg+xml")
         if p == "/favicon.ico":
             return self._send(204, b"", "image/x-icon")
-        if p == "/api/sessions":
-            return self._send(200, sessions_payload())
         if p == "/api/health":
             return self._send(200, {"ok": True})
+        if not self._authed():
+            if p.startswith("/api/"):
+                return self._send(401, {"error": "unauthorized"})
+            return self._static("login.html", "text/html; charset=utf-8")
+        if p == "/" or p == "/index.html":
+            return self._static("index.html", "text/html; charset=utf-8")
+        if p == "/chat":
+            return self._static("chat.html", "text/html; charset=utf-8")
+        if p in ("/app.js", "/chat.js"):
+            return self._static(p[1:], "application/javascript; charset=utf-8")
+        if p in ("/style.css", "/chat.css"):
+            return self._static(p[1:], "text/css; charset=utf-8")
+        if p == "/api/sessions":
+            return self._send(200, sessions_payload())
+        if p == "/api/chat":
+            q = parse_qs(parsed.query)
+            sid = (q.get("session_id") or [""])[0]
+            try:
+                offset = int((q.get("offset") or ["0"])[0])
+            except ValueError:
+                offset = 0
+            meta = INDEX.get(sid)
+            if not meta:
+                return self._send(404, {"error": "unknown session"})
+            path = bridge.transcript_path(meta)
+            if not path:
+                return self._send(404, {"error": "transcript not found"})
+            out = bridge.read_chat(path, offset)
+            info = live_map().get(sid)
+            out.update({
+                "session_id": sid,
+                "title": meta.get("title"),
+                "project": meta.get("project"),
+                "cwd": meta.get("cwd"),
+                "active": info is not None,
+                "activity": info.get("activity") if info else None,
+            })
+            return self._send(200, out)
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
         p = urlparse(self.path).path
         data = self._body()
+
+        if p == "/api/login":
+            if not TOKEN:
+                return self._send(400, {"ok": False,
+                                        "detail": "no token configured"})
+            if hmac.compare_digest((data.get("token") or "").strip(), TOKEN):
+                cookie = ("csm_token=%s; Path=/; Max-Age=31536000; "
+                          "HttpOnly; SameSite=Lax" % TOKEN)
+                return self._send(200, {"ok": True}, extra={"Set-Cookie": cookie})
+            time.sleep(0.6)                 # soften brute-force attempts
+            return self._send(401, {"ok": False, "detail": "wrong token"})
+
+        if not self._authed():
+            return self._send(401, {"error": "unauthorized"})
+
+        if p == "/api/chat/send":
+            sid = data.get("session_id")
+            text = (data.get("text") or "").strip()
+            if not text:
+                return self._send(400, {"ok": False, "detail": "empty message"})
+            info = live_map().get(sid)
+            if not info:
+                # not running: the phone UI offers Resume (which opens a fresh
+                # terminal on the laptop) and retries once it's live
+                return self._send(409, {"ok": False, "inactive": True,
+                                        "detail": "session is not running"})
+            res = bridge.send_to_session(info["tty"], text)
+            return self._send(200 if res["ok"] else 502, res)
 
         if p == "/api/focus":
             sid = data.get("session_id")
@@ -323,7 +427,14 @@ def main():
     threading.Thread(target=maintenance_loop, daemon=True).start()
     ENRICHER.start()
     url = "http://%s:%d/" % (HOST, PORT)
-    sys.stderr.write("[csm] serving on %s\n" % url)
+    sys.stderr.write("[csm] serving on %s (auth %s)\n"
+                     % (url, "ON" if TOKEN else "off"))
+    if HOST not in ("127.0.0.1", "localhost") and not TOKEN:
+        sys.stderr.write(
+            "[csm] *** WARNING: bound to %s with NO access token. Anyone who "
+            "can reach this port can read transcripts and type into your "
+            "Claude sessions. Set one:  openssl rand -hex 32 > %s\n"
+            % (HOST, TOKEN_FILE))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

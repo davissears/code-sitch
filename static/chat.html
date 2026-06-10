@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Claude Code · Chat</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/chat.css">
+</head>
+<body class="chatpage">
+  <header class="chathead">
+    <a class="back" href="/" aria-label="back to all sessions">‹</a>
+    <div class="who">
+      <div class="ctitle" id="ctitle">…</div>
+      <div class="cproj" id="cproj"></div>
+    </div>
+    <div class="cstatus" id="cstatus"><span class="dot idle"></span><span id="cstatelabel">…</span></div>
+  </header>
+
+  <main class="chatlog" id="msgs">
+    <div class="histnote hidden" id="histnote">older history not shown</div>
+  </main>
+
+  <div class="typing hidden" id="typing"><span></span><span></span><span></span></div>
+
+  <footer class="composer">
+    <div class="deadbar hidden" id="deadbar">
+      <span>This session isn't running.</span>
+      <button id="resumeBtn">▷ Resume on laptop</button>
+    </div>
+    <div class="inputbar" id="inputbar">
+      <textarea id="box" rows="1" placeholder="Message this Claude…" autocomplete="off"></textarea>
+      <button id="send" aria-label="send">↑</button>
+    </div>
+  </footer>
+
+<script src="/chat.js"></script>
+</body>
+</html>

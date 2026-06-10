@@ -8,6 +8,13 @@ focus its terminal window; click an **inactive** one to resume it in a fresh
 terminal. A usage table shows chats / messages sent / tokens for today, the last 7
 days, the last 30 days, and all time.
 
+And you can take it with you: served over a private network (Tailscale), the
+dashboard works from your phone, where every session opens a **chat view** — read
+what each Claude is doing, send it new prompts, and watch replies arrive, all
+against the *same* live terminal session on your Mac. Messages sent from the phone
+appear in the terminal scrollback, so you sit back down at the laptop exactly where
+the conversation is. Setup and security model: **[REMOTE.md](REMOTE.md)**.
+
 No build step and no dependencies — Python standard library on the backend, vanilla
 JS on the frontend.
 
@@ -83,7 +90,7 @@ resumes a window after a login, macOS may ask to let it **control Terminal**
 | Variable | Default | Meaning |
 |---|---|---|
 | `CSM_PORT` | `8787` | Port to serve on. |
-| `CSM_HOST` | `127.0.0.1` | Bind address. **Keep this localhost** — the server can read transcripts and focus/resume windows; do not expose it to a network. |
+| `CSM_HOST` | `127.0.0.1` | Bind address. Keep localhost unless you're setting up phone access — then follow [REMOTE.md](REMOTE.md) (private network + access token; never the open internet). |
 | `CSM_ENRICH_LIMIT` | `50` | How many of the newest sessions get AI keywords per background pass. |
 
 Example: `CSM_PORT=9000 ./run.sh`
@@ -111,6 +118,8 @@ Claude Code writes one JSONL transcript per conversation under
 | **Enter → agentic search** | Hands the whole session index to `claude -p`, which ranks by intent and explains each match. |
 | **Focus window** (active) | Finds the Terminal tab whose tty matches the live process, selects it, and hands off to **yabai** to cross Mission Control spaces. |
 | **Resume** (inactive) | Opens a new Terminal window, `cd`s to the session's original directory, and runs `claude --resume <id>`. |
+| **Remote chat** (`/chat`) | Reading: tails the session transcript incrementally by byte offset. Writing: AppleScript types your message into the live TUI via its Terminal tab (keyed by tty) and submits it — the same session, same scrollback, nothing forks. Tool calls render as compact chips; working/waiting status rides along. |
+| **Auth** (remote mode) | If `~/.claude/situation-monitor/token` (or `CSM_TOKEN`) exists, every request needs it — login page sets a year-long HttpOnly cookie; `Authorization: Bearer` works for scripts; constant-time compares. No token → localhost-only behavior, no login. |
 
 Headless `claude -p` runs (`entrypoint: "sdk-cli"`) are excluded from the list, and
 the monitor's own AI calls use `--no-session-persistence`, so it never indexes itself.
@@ -119,16 +128,18 @@ the monitor's own AI calls use `--no-session-persistence`, so it never indexes i
 
 ## Project layout
 
-- `server.py` — stdlib HTTP server + JSON API (`/api/sessions`, `/api/focus`, `/api/resume`, `/api/search`, `/api/refresh`)
+- `server.py` — stdlib HTTP server + JSON API (`/api/sessions`, `/api/chat`, `/api/chat/send`, `/api/login`, `/api/focus`, `/api/resume`, `/api/search`, `/api/refresh`)
 - `sessions.py` — discover + parse transcripts (single-pass, mtime-cached, usage aggregation)
 - `liveness.py` — detect which sessions are running
 - `windows.py` — focus (AppleScript + yabai) / resume (AppleScript)
+- `bridge.py` — remote chat: transcript→messages parsing + typing into the live TUI
 - `keywords.py` — heuristic + AI keyword pools, background enricher
 - `agentic.py` — Enter-key agentic relevance search
 - `claude_cli.py` — headless `claude -p` wrapper + connectivity probe
-- `static/` — the single-page UI (`index.html`, `app.js`, `style.css`, `favicon.svg`)
+- `static/` — the UI (`index.html`/`app.js`/`style.css`, chat: `chat.html`/`chat.js`/`chat.css`, `login.html`, `favicon.svg`)
 - `run.sh` — start the server and open the browser
 - `install-startup.sh` / `uninstall-startup.sh` — optional login-time LaunchAgent
+- `REMOTE.md` — phone access: Tailscale setup, token auth, threat model
 
 ---
 
@@ -170,10 +181,13 @@ probes reachability cheaply (cached ~10s) so it never spawns doomed calls.
 
 ## Security & privacy
 
-Runs entirely on `127.0.0.1`. It reads your Claude Code transcripts locally and can
-focus or resume terminal windows, so keep `CSM_HOST=127.0.0.1` and never put it behind
-a public proxy. It does not send your transcripts anywhere except, for the optional AI
-features, to the Anthropic API via your own authenticated `claude` CLI.
+Runs on `127.0.0.1` by default. It reads your Claude Code transcripts locally and can
+focus or resume terminal windows — and, in remote mode, type into your live Claude
+sessions — so never put it behind a public proxy or port-forward it to the internet.
+Phone access goes through a private network (Tailscale) plus a mandatory access
+token; the full threat model and setup are in [REMOTE.md](REMOTE.md). It does not
+send your transcripts anywhere except, for the optional AI features, to the
+Anthropic API via your own authenticated `claude` CLI.
 
 ---
 

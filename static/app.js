@@ -155,6 +155,10 @@ function clearAgentic() {
 }
 
 // ---------------------------------------------------------------- actions
+function openChat(s) {
+  location.href = "/chat?session=" + encodeURIComponent(s.id);
+}
+
 async function activate(s) {
   if (state.busy.has(s.id)) return;
   state.busy.add(s.id);
@@ -257,11 +261,15 @@ function render() {
   tbody.innerHTML = "";
   const terms = state.mode === "instant" ? tokens(state.filter) : [];
 
+  // on touch devices the row opens remote chat (you can't focus a Mac window
+  // from a phone); on the desktop it keeps focusing/resuming the terminal
+  const coarse = matchMedia("(pointer: coarse)").matches;
+
   for (const s of list) {
     // three live states (working / waiting / active-unknown) plus inactive
     const act = s.active ? (s.activity || "active") : "inactive";
     const tr = el("tr", s.active ? "active state-" + act : "");
-    tr.onclick = () => activate(s);
+    tr.onclick = () => coarse ? openChat(s) : activate(s);
 
     // status
     const tdS = el("td", "c-status");
@@ -308,9 +316,12 @@ function render() {
 
     // action
     const tdA = el("td", "c-action action");
+    const chat = el("span", "chip chat", "💬 chat");
+    chat.title = "Chat with this session from here (works remotely)";
+    chat.onclick = (e) => { e.stopPropagation(); openChat(s); };
     const chip = el("span", "chip " + (s.active ? "focus" : "resume"),
       s.active ? "⤢ focus" : "▷ resume");
-    tdA.append(chip);
+    tdA.append(chat, chip);
 
     tr.append(tdS, tdM, tdP, tdC, tdT, tdA);
     tbody.append(tr);
