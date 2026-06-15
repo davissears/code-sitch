@@ -132,12 +132,23 @@ def _tool_summary(name, arguments):
     return ""
 
 
+def _usage_int(usage, key):
+    try:
+        return int(usage.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _add_token_usage(bucket, usage):
     if not isinstance(usage, dict):
         return
-    input_tokens = int(usage.get("input_tokens") or 0)
-    cached = int(usage.get("cached_input_tokens") or 0)
-    output = int(usage.get("output_tokens") or 0)
+    input_tokens = _usage_int(usage, "input_tokens")
+    cached = (
+        _usage_int(usage, "cached_input_tokens")
+        if usage.get("cached_input_tokens") is not None
+        else _usage_int(usage, "cache_read_input_tokens")
+    )
+    output = _usage_int(usage, "output_tokens")
     bucket[0] += max(input_tokens - cached, 0)
     bucket[1] += output
     bucket[3] += cached
@@ -164,7 +175,15 @@ def discover_threads(db_path=DB_PATH):
     if conn is None:
         return []
     try:
-        cols = ", ".join(THREAD_COLUMNS)
+        existing = {
+            r["name"] for r in conn.execute("pragma table_info(threads)").fetchall()
+        }
+        if not existing:
+            return []
+        cols = ", ".join(
+            c if c in existing else "null as %s" % c
+            for c in THREAD_COLUMNS
+        )
         rows = conn.execute(
             "select %s from threads order by coalesce(updated_at_ms, updated_at * 1000) desc, id desc" % cols
         ).fetchall()
@@ -284,6 +303,7 @@ def parse_session(row):
         "slug": None,
         "title": title,
         "ai_title": title,
+        "preview": row.get("preview"),
         "first_prompt": first_prompt,
         "last_prompt": last_prompt,
         "samples": samples,
@@ -295,6 +315,9 @@ def parse_session(row):
         "usage_by_day": usage_by_day,
         "user_by_day": user_by_day,
         "archived": bool(row.get("archived")),
+        "source": row.get("source"),
+        "thread_source": row.get("thread_source"),
+        "model_provider": row.get("model_provider"),
         "model": row.get("model"),
         "reasoning_effort": row.get("reasoning_effort"),
         "ai_keywords": None,

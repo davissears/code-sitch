@@ -98,6 +98,11 @@ def session_view(meta, active):
         meta.get("git_branch", "") or "", meta.get("slug", "") or "",
         (meta.get("first_prompt") or "")[:400],
         (meta.get("last_prompt") or "")[:300],
+        (meta.get("preview") or "")[:300],
+        meta.get("source") or "",
+        meta.get("thread_source") or "",
+        meta.get("model_provider") or "",
+        meta.get("model") or "",
         " ".join(pool),
         meta.get("provider_label") or meta.get("provider") or "",
     ])).lower()[:1800]
@@ -111,12 +116,20 @@ def session_view(meta, active):
         "project": meta.get("project"),
         "cwd": meta.get("cwd"),
         "branch": meta.get("git_branch"),
+        "created": meta.get("created"),
         "updated": meta.get("updated"),
         "messages": meta.get("messages", 0),
         "active": info is not None,
         # "working" (generating) | "waiting" (awaiting your prompt) | None (running,
         # but we couldn't read the terminal title). Only meaningful when active.
         "activity": info.get("activity") if info else None,
+        "archived": bool(meta.get("archived")),
+        "source": meta.get("source"),
+        "thread_source": meta.get("thread_source"),
+        "model_provider": meta.get("model_provider"),
+        "model": meta.get("model"),
+        "reasoning_effort": meta.get("reasoning_effort"),
+        "preview": (meta.get("preview") or "")[:280],
         "first_prompt": (meta.get("first_prompt") or "")[:280],
         "last_prompt": (meta.get("last_prompt") or "")[:200],
         "keywords": pool,
@@ -319,8 +332,20 @@ class Handler(BaseHTTPRequestHandler):
                 "title": meta.get("title"),
                 "project": meta.get("project"),
                 "cwd": meta.get("cwd"),
+                "branch": meta.get("git_branch"),
+                "created": meta.get("created"),
+                "updated": meta.get("updated"),
                 "active": info is not None,
                 "activity": info.get("activity") if info else None,
+                "archived": bool(meta.get("archived")),
+                "source": meta.get("source"),
+                "thread_source": meta.get("thread_source"),
+                "model_provider": meta.get("model_provider"),
+                "model": meta.get("model"),
+                "reasoning_effort": meta.get("reasoning_effort"),
+                "preview": (meta.get("preview") or "")[:280],
+                "first_prompt": (meta.get("first_prompt") or "")[:280],
+                "last_prompt": (meta.get("last_prompt") or "")[:200],
             })
             return self._send(200, out)
         return self._send(404, {"error": "not found"})
@@ -389,9 +414,13 @@ class Handler(BaseHTTPRequestHandler):
             if not session_capability(meta, "resume"):
                 return self._send(409, {"ok": False, "unsupported": True,
                                         "detail": "session provider does not support resume"})
+            dangerous_resume = (
+                bool(data.get("dangerously"))
+                and (meta.get("provider") or "claude") == "claude"
+            )
             res = windows.resume_session(
                 meta,
-                dangerously=bool(data.get("dangerously")),
+                dangerously=dangerous_resume,
                 name=data.get("name"),
             )
             # the new window won't show as active until it writes to its log;

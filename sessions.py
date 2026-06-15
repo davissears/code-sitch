@@ -16,7 +16,7 @@ from providers import claude
 
 STATE_DIR = config.STATE_DIR
 CACHE_PATH = os.path.join(STATE_DIR, "sessions-cache.json")
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 
 # Compatibility names for older imports. Claude-specific behavior now lives in
 # providers.claude.
