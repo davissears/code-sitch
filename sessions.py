@@ -11,10 +11,10 @@ import threading
 import time
 
 import providers
+import config
 from providers import claude
 
-HOME = os.path.expanduser("~")
-STATE_DIR = os.path.join(HOME, ".claude", "situation-monitor")
+STATE_DIR = config.STATE_DIR
 CACHE_PATH = os.path.join(STATE_DIR, "sessions-cache.json")
 CACHE_VERSION = 4
 
@@ -60,18 +60,18 @@ def _codex_record(provider, row):
 def discover_records():
     """All provider-backed session sources with cache signatures."""
     records = []
-    for path in claude.discover_paths():
-        rec = _claude_record(path)
-        if rec:
-            records.append(rec)
     for provider in providers.all_providers():
         if provider is claude:
-            continue
-        discover = getattr(provider, "discover_threads", None)
-        if not discover:
-            continue
-        for row in discover():
-            records.append(_codex_record(provider, row))
+            for path in claude.discover_paths():
+                rec = _claude_record(path)
+                if rec:
+                    records.append(rec)
+        else:
+            discover = getattr(provider, "discover_threads", None)
+            if not discover:
+                continue
+            for row in discover():
+                records.append(_codex_record(provider, row))
     return records
 
 

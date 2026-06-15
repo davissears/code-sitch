@@ -1,5 +1,7 @@
 """Provider-specific session adapters."""
 
+import config
+
 from . import claude
 
 try:
@@ -9,10 +11,12 @@ except Exception:  # pragma: no cover - provider should degrade if unavailable
 
 
 def all_providers():
-    providers = [claude]
+    available = {
+        claude.PROVIDER: claude,
+    }
     if codex is not None:
-        providers.append(codex)
-    return providers
+        available[codex.PROVIDER] = codex
+    return [available[name] for name in config.PROVIDERS if name in available]
 
 
 def for_name(name):

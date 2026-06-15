@@ -79,7 +79,7 @@ nothing is hardcoded:
 ./uninstall-startup.sh       # stops and removes it
 ```
 
-It logs to `~/.claude/situation-monitor/server.log`. The **first** time it focuses or
+It logs to `CSM_STATE_DIR/server.log`. The **first** time it focuses or
 resumes a window after a login, macOS may ask to let it **control Terminal**
 (Automation) — approve once. If you use yabai, grant it Accessibility permission too.
 
@@ -91,6 +91,13 @@ resumes a window after a login, macOS may ask to let it **control Terminal**
 |---|---|---|
 | `CSM_PORT` | `8787` | Port to serve on. |
 | `CSM_HOST` | `127.0.0.1` | Bind address. Keep localhost unless you're setting up phone access — then follow [REMOTE.md](REMOTE.md) (private network + access token; never the open internet). |
+| `CSM_PROVIDERS` | `claude,codex` | Comma-separated providers to index. |
+| `CSM_STATE_DIR` | `~/.claude/situation-monitor` if it exists, otherwise `~/.situation-monitor` | Cache, logs, and remote token directory. |
+| `CSM_CLAUDE_HOME` | `~/.claude` | Claude Code home directory; transcripts are read from `projects/` under it. |
+| `CSM_CODEX_HOME` | `~/.codex` | Codex home directory. |
+| `CSM_CODEX_STATE_DB` | `~/.codex/sqlite/state_5.sqlite` | Codex thread state database. |
+| `CSM_CLAUDE_CLI` | `claude` | Claude CLI command used for AI search/keywords and Claude resume. |
+| `CSM_CODEX_CLI` | `codex` | Codex CLI command used for Codex resume. |
 | `CSM_ENRICH_LIMIT` | `50` | How many of the newest sessions get AI keywords per background pass. |
 
 Example: `CSM_PORT=9000 ./run.sh`
@@ -114,12 +121,12 @@ Claude Code writes one JSONL transcript per conversation under
 | **Active vs. inactive** | We list live `claude` processes (`ps`), resolve each one's working directory (`lsof`) and controlling tty, then match it to the newest session in that directory. A session with a live process is *active*. |
 | **Working vs. waiting** | For each active session we read its Terminal tab title (via AppleScript). Claude Code prefixes the title with an animated Braille spinner (`⠂⠄⠆…`) while it's generating and a steady `✳` when it's done and waiting for you — so the leading glyph *is* Claude's own busy state, and we just read it back. Shown as a green **working** dot vs. an amber **waiting** dot. Keyed by tty (authoritative from `ps`), so it's correct even when several sessions share one directory. Falls back to a plain **active** badge on non-Terminal terminals. |
 | **Instant keyword search** | Filters locally as you type over title, project, prompts, and an AI-generated keyword pool. |
-| **AI keyword pool** | Generated per session by `claude -p` in the background and cached in `~/.claude/situation-monitor/`. |
+| **AI keyword pool** | Generated per session by `claude -p` in the background and cached in `CSM_STATE_DIR`. |
 | **Enter → agentic search** | Hands the whole session index to `claude -p`, which ranks by intent and explains each match. |
 | **Focus window** (active) | Finds the Terminal tab whose tty matches the live process, selects it, and hands off to **yabai** to cross Mission Control spaces. |
 | **Resume** (inactive) | Opens a new Terminal window, `cd`s to the session's original directory, and runs `claude --resume <id>`. |
 | **Remote chat** (`/chat`) | Reading: tails the session transcript incrementally by byte offset. Writing: AppleScript types your message into the live TUI via its Terminal tab (keyed by tty) and submits it — the same session, same scrollback, nothing forks. Tool calls render as compact chips; working/waiting status rides along. |
-| **Auth** (remote mode) | If `~/.claude/situation-monitor/token` (or `CSM_TOKEN`) exists, every request needs it — login page sets a year-long HttpOnly cookie; `Authorization: Bearer` works for scripts; constant-time compares. No token → localhost-only behavior, no login. |
+| **Auth** (remote mode) | If `CSM_STATE_DIR/token` (or `CSM_TOKEN`) exists, every request needs it — login page sets a year-long HttpOnly cookie; `Authorization: Bearer` works for scripts; constant-time compares. No token → localhost-only behavior, no login. |
 
 Headless `claude -p` runs (`entrypoint: "sdk-cli"`) are excluded from the list, and
 the monitor's own AI calls use `--no-session-persistence`, so it never indexes itself.
@@ -174,7 +181,7 @@ probes reachability cheaply (cached ~10s) so it never spawns doomed calls.
   Accessibility permission. Without yabai, focus only works within the current Space.
 - **AI keywords / search show "offline".** `claude` isn't reachable (no network, or not
   authenticated). Test with `claude -p hello`. Local features keep working regardless.
-- **The login service won't stay running.** Read `~/.claude/situation-monitor/server.log`.
+- **The login service won't stay running.** Read `CSM_STATE_DIR/server.log`.
   A clean "port already in use" exit is expected if you also ran `./run.sh` manually.
 
 ---

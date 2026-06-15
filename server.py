@@ -16,8 +16,8 @@ Serves a single-page UI plus a small JSON API:
   POST /api/refresh      force a reindex
 
 Defaults to localhost with no auth. For remote access (e.g. over Tailscale),
-put a secret in ~/.claude/situation-monitor/token (or CSM_TOKEN) and every
-request must present it — see REMOTE.md. Python stdlib only.
+put a secret in CSM_STATE_DIR/token (or CSM_TOKEN) and every request must
+present it — see REMOTE.md. Python stdlib only.
 """
 
 import hmac
@@ -36,6 +36,7 @@ import bridge
 import keywords as kw
 import agentic
 import claude_cli
+import config
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
@@ -43,8 +44,7 @@ PORT = int(os.environ.get("CSM_PORT", "8787"))
 HOST = os.environ.get("CSM_HOST", "127.0.0.1")
 ENRICH_LIMIT = int(os.environ.get("CSM_ENRICH_LIMIT", "50"))
 
-TOKEN_FILE = os.path.join(os.path.expanduser("~"), ".claude",
-                          "situation-monitor", "token")
+TOKEN_FILE = os.path.join(config.STATE_DIR, "token")
 
 
 def _load_token():

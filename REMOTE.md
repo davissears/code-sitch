@@ -38,16 +38,22 @@ permissions`**. That is remote code execution on your Mac, full stop. So:
 ## Step 1 — set an access token
 
 ```bash
-mkdir -p ~/.claude/situation-monitor
-openssl rand -hex 32 > ~/.claude/situation-monitor/token
-chmod 600 ~/.claude/situation-monitor/token
-cat ~/.claude/situation-monitor/token     # copy this — you'll paste it on the phone once
+STATE_DIR="${CSM_STATE_DIR:-$HOME/.situation-monitor}"
+[ -d "$HOME/.claude/situation-monitor" ] && STATE_DIR="${CSM_STATE_DIR:-$HOME/.claude/situation-monitor}"
+mkdir -p "$STATE_DIR"
+openssl rand -hex 32 > "$STATE_DIR/token"
+chmod 600 "$STATE_DIR/token"
+cat "$STATE_DIR/token"     # copy this — you'll paste it on the phone once
 ```
 
 When that file exists, every page and API call requires the token. Browsers
 get a login screen; after you paste the token once, an HttpOnly cookie keeps
 you signed in for a year on that device. (`CSM_TOKEN` env also works, and
 `Authorization: Bearer <token>` for scripts.)
+
+The token lives in `CSM_STATE_DIR`. By default that is the existing
+`~/.claude/situation-monitor` directory if present, otherwise
+`~/.situation-monitor`.
 
 To sign out a lost phone: rotate the token (run the `openssl` line again) and
 restart the server — every old cookie dies instantly.

@@ -13,6 +13,8 @@ import sqlite3
 from datetime import datetime, timezone
 from urllib.parse import quote
 
+import config
+
 PROVIDER = "codex"
 PROVIDER_LABEL = "Codex"
 CAPABILITIES = {
@@ -23,8 +25,7 @@ CAPABILITIES = {
     "focus": False,
 }
 
-HOME = os.path.expanduser("~")
-DB_PATH = os.path.join(HOME, ".codex", "sqlite", "state_5.sqlite")
+DB_PATH = config.CODEX_STATE_DB
 TAIL_BYTES = 1 << 20
 
 THREAD_COLUMNS = (
@@ -379,7 +380,7 @@ def resume_command(meta, dangerously=False, name=None):
     """Build the Codex resume command without launching Terminal."""
     raw_id = raw_session_id(meta)
     cwd = meta.get("cwd") if isinstance(meta, dict) else None
-    argv = ["codex", "resume", raw_id]
+    argv = [config.CODEX_CLI, "resume", raw_id]
 
     parts = []
     if cwd:

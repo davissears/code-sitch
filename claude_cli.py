@@ -5,15 +5,15 @@ Used for AI keyword generation and agentic search. `--output-format json`
 returns an object whose `result` field holds the model's text answer.
 """
 
-import os
 import re
 import json
 import time
 import socket
-import shutil
 import subprocess
 
-CLAUDE = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
+import config
+
+CLAUDE = config.CLAUDE_CLI
 
 # ---- connectivity ---------------------------------------------------------
 # The session list, liveness, focus and resume are entirely local and keep

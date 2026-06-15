@@ -15,6 +15,8 @@ import shlex
 import subprocess
 from datetime import datetime, timezone
 
+import config
+
 PROVIDER = "claude"
 PROVIDER_LABEL = "Claude"
 CAPABILITIES = {
@@ -25,8 +27,7 @@ CAPABILITIES = {
     "focus": True,
 }
 
-HOME = os.path.expanduser("~")
-PROJECTS_DIR = os.path.join(HOME, ".claude", "projects")
+PROJECTS_DIR = config.CLAUDE_PROJECTS_DIR
 
 TAIL_BYTES = 1 << 20
 _BIG_LINE = 20000
@@ -563,7 +564,7 @@ def resume_command(meta, dangerously=False, name=None):
     """
     raw_id = raw_session_id(meta)
     cwd = meta.get("cwd") if isinstance(meta, dict) else None
-    argv = ["claude", "--resume", raw_id]
+    argv = [config.CLAUDE_CLI, "--resume", raw_id]
     if dangerously:
         argv.append("--dangerously-skip-permissions")
     if name:
