@@ -105,17 +105,23 @@ function setStatus(active, activity) {
   const caps = state.capabilities || {};
   const st = $("#cstatus"), lbl = $("#cstatelabel"), dot = st.querySelector(".dot");
   const act = active ? (activity || "active") : "inactive";
+  const readOnly = caps.send === false;
   st.className = "cstatus " + act;
   dot.className = "dot " + ({ working: "live", waiting: "wait", active: "live", inactive: "idle" }[act]);
-  lbl.textContent = { working: "working", waiting: "waiting for you",
-                      active: "running", inactive: "not running" }[act];
+  lbl.textContent = readOnly ? "read-only" :
+    { working: "working", waiting: "waiting for you",
+      active: "running", inactive: "not running" }[act];
   $("#typing").classList.toggle("hidden", act !== "working");
-  $("#deadbar").classList.toggle("hidden", active);
+  $("#deadbar").classList.toggle("hidden", active && !readOnly);
+  $("#deadbar span").textContent = readOnly
+    ? `${state.providerLabel} transcripts are read-only here. Remote sending is not supported for this provider.`
+    : "This session isn't running.";
   $("#resumeBtn").disabled = caps.resume === false;
-  $("#resumeBtn").classList.toggle("hidden", caps.resume === false);
-  $("#box").disabled = !active || caps.send === false;
-  $("#send").disabled = !active || caps.send === false;
-  if (caps.send === false) $("#box").placeholder = state.providerLabel + " does not support remote send";
+  $("#resumeBtn").classList.toggle("hidden", caps.resume === false || readOnly);
+  $("#inputbar").classList.toggle("readonly", readOnly);
+  $("#box").disabled = !active || readOnly;
+  $("#send").disabled = !active || readOnly;
+  if (readOnly) $("#box").placeholder = `Read-only ${state.providerLabel} transcript`;
   else if (!active) $("#box").placeholder = "Resume the session to chat…";
   else $("#box").placeholder = "Message this " + state.providerLabel + "…";
 }
@@ -131,6 +137,9 @@ async function poll() {
     const data = await r.json();
     state.providerLabel = data.provider_label || "session";
     state.capabilities = data.capabilities || {};
+    const badge = $("#providerBadge");
+    badge.textContent = state.providerLabel;
+    badge.className = "provider provider-" + (data.provider || "session");
     $("#ctitle").textContent = data.title || "(untitled session)";
     $("#cproj").textContent = data.project || data.cwd || "";
     document.title = (data.title || "Chat") + " · " + state.providerLabel;

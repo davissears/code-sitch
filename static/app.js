@@ -137,6 +137,10 @@ function displayList() {
   return instantMatches();
 }
 
+function providerBadge(s) {
+  return el("span", "provider provider-" + (s.provider || "session"), s.provider_label || s.provider || "Session");
+}
+
 // ---------------------------------------------------------------- agentic
 async function runAgentic(query) {
   state.mode = "agentic";
@@ -254,7 +258,7 @@ function render() {
     banner.className = "banner" + (state.agentic.loading ? " loading" : "");
     banner.innerHTML = "";
     if (state.agentic.loading) {
-      banner.append(el("span", "bspin"), el("span", null, `Claude is searching for “${state.agentic.query}”…`));
+      banner.append(el("span", "bspin"), el("span", null, `AI search is looking for “${state.agentic.query}”…`));
     } else if (state.agentic.error) {
       const msg = state.agentic.error === "offline"
         ? "AI search needs a connection — you appear to be offline. Instant keyword filter still works."
@@ -309,11 +313,16 @@ function render() {
       tdM.append(el("div", "reason", "↳ " + s._reason));
     } else {
       const meta = el("div", "metaline");
-      meta.append(el("span", "provider provider-" + (s.provider || "claude"), s.provider_label || s.provider || "Claude"));
+      meta.append(providerBadge(s));
       meta.append(el("span", "sep", "·"));
       if (s.branch && s.branch !== "HEAD") { meta.append(el("span", "branch", "⎇ " + s.branch)); meta.append(el("span", "sep", "·")); }
       meta.append(el("span", null, `${s.messages} repl${s.messages === 1 ? "y" : "ies"}`));
       if (s.last_prompt) { meta.append(el("span", "sep", "·")); meta.append(el("span", null, "“" + truncate(s.last_prompt, 60) + "”")); }
+      tdM.append(meta);
+    }
+    if (s._reason) {
+      const meta = el("div", "metaline");
+      meta.append(providerBadge(s));
       tdM.append(meta);
     }
 

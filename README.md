@@ -1,19 +1,19 @@
-# Claude Code · Situation Monitor
+# Code Situation Monitor
 
-A local web dashboard of **every Claude Code conversation on this machine**. Each
-session is one row: an AI-generated summary, when it was last touched, and whether
-it is **running right now**. Search instantly by keyword, or press **Enter** to let
-Claude agentically find the conversations you mean. Click an **active** session to
-focus its terminal window; click an **inactive** one to resume it in a fresh
-terminal. A usage table shows chats / messages sent / tokens for today, the last 7
-days, the last 30 days, and all time.
+A local web dashboard for **Claude Code and Codex conversations on this machine**.
+Each session is one row with a provider badge, summary, last activity, and running
+state when the provider exposes it. Search instantly by keyword, or press
+**Enter** to run AI search across the indexed sessions. Click an **active** session
+to focus its terminal window; click an **inactive** one to resume it in a fresh
+terminal when that provider supports resume. A usage table shows chats / messages
+sent / tokens for today, the last 7 days, the last 30 days, and all time.
 
 And you can take it with you: served over a private network (Tailscale), the
 dashboard works from your phone, where every session opens a **chat view** — read
-what each Claude is doing, send it new prompts, and watch replies arrive, all
-against the *same* live terminal session on your Mac. Messages sent from the phone
-appear in the terminal scrollback, so you sit back down at the laptop exactly where
-the conversation is. Setup and security model: **[REMOTE.md](REMOTE.md)**.
+the transcript and, for providers that support remote send, send new prompts into
+the *same* live terminal session on your Mac. Claude sessions can be sent to
+remotely; Codex chat is currently read-only because Codex liveness/send support is
+not mapped to Terminal tabs yet. Setup and security model: **[REMOTE.md](REMOTE.md)**.
 
 No build step and no dependencies — Python standard library on the backend, vanilla
 JS on the frontend.
@@ -30,8 +30,9 @@ JS on the frontend.
 |---|---|---|
 | **macOS** | Uses AppleScript (`osascript`), `ps`, and `lsof`. Built and tested on macOS 26 / Terminal.app. | **Yes** |
 | **Python 3.9+** | Runs the server. **Standard library only — nothing to `pip install`.** | **Yes** |
-| **Claude Code transcripts** under `~/.claude/projects/` | The data source. The dashboard reads these `*.jsonl` logs. If you've never run Claude Code interactively, the list will be empty. | **Yes** (for data) |
-| **`claude` CLI**, installed and authenticated | Powers AI keyword generation and the Enter-to-search. Everything else works without it. | Optional |
+| **Provider transcript/state stores** | Claude Code transcripts under `~/.claude/projects/` and/or Codex state under `~/.codex/sqlite/state_5.sqlite` plus rollout files. At least one provider needs local data or the list will be empty. | **Yes** (for data) |
+| **`claude` CLI**, installed and authenticated | Powers AI keyword generation and the Enter-to-search, and resumes Claude sessions. Everything else works without it. | Optional |
+| **`codex` CLI**, installed and authenticated | Resumes Codex threads via `codex resume <thread-id>`. Codex transcript reading does not require the CLI. | For Codex resume |
 | **Apple Terminal** (Terminal.app) | "Focus window" / "Resume" use Terminal AppleScript. Sessions running under other terminals appear in the list but can't be focused/resumed yet. | For focus/resume |
 | **yabai** (`brew install koekeishiya/formulae/yabai`) | Lets "focus" switch to a window on another Mission Control space. Without it, focus still works within the current space. | Optional |
 
@@ -41,13 +42,15 @@ JS on the frontend.
 sw_vers                      # macOS version (Darwin 25+/macOS 26 tested)
 python3 --version            # 3.9 or newer
 command -v claude            # the claude CLI (optional — enables AI features)
-ls -d ~/.claude/projects     # transcript store; must exist and contain *.jsonl
+command -v codex             # optional — enables Codex resume
+ls -d ~/.claude/projects     # Claude transcript store, if using Claude
+ls ~/.codex/sqlite/state_5.sqlite  # Codex thread database, if using Codex
 command -v yabai             # optional — cross-Space focus
 ```
 
-If `~/.claude/projects` is missing, run any interactive `claude` session once to
-create it. If `command -v claude` prints nothing, the AI keyword/search features
-are disabled but the rest of the app works.
+If a provider's store is missing, run that provider interactively once to create
+local history. If `command -v claude` prints nothing, the AI keyword/search
+features are disabled but the rest of the app works.
 
 ---
 
@@ -91,7 +94,7 @@ resumes a window after a login, macOS may ask to let it **control Terminal**
 |---|---|---|
 | `CSM_PORT` | `8787` | Port to serve on. |
 | `CSM_HOST` | `127.0.0.1` | Bind address. Keep localhost unless you're setting up phone access — then follow [REMOTE.md](REMOTE.md) (private network + access token; never the open internet). |
-| `CSM_PROVIDERS` | `claude,codex` | Comma-separated providers to index. |
+| `CSM_PROVIDERS` | `claude,codex` | Comma-separated providers to index. Use `claude`, `codex`, or both. |
 | `CSM_STATE_DIR` | `~/.claude/situation-monitor` if it exists, otherwise `~/.situation-monitor` | Cache, logs, and remote token directory. |
 | `CSM_CLAUDE_HOME` | `~/.claude` | Claude Code home directory; transcripts are read from `projects/` under it. |
 | `CSM_CODEX_HOME` | `~/.codex` | Codex home directory. |
@@ -102,30 +105,33 @@ resumes a window after a login, macOS may ask to let it **control Terminal**
 
 Example: `CSM_PORT=9000 ./run.sh`
 
-The **"skip permissions on resume"** checkbox (top-right of the UI) launches resumed
-sessions with `--dangerously-skip-permissions`. It is **on by default**; uncheck it
-to resume with normal permission prompts. The choice persists in the browser.
+The **"skip permissions on resume"** checkbox is Claude-specific. For Claude
+sessions it launches resumed sessions with `--dangerously-skip-permissions`; Codex
+resume ignores it. It is **on by default**; uncheck it to resume Claude with normal
+permission prompts. The choice persists in the browser.
 
 ---
 
 ## How it works
 
 Claude Code writes one JSONL transcript per conversation under
-`~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`. The monitor reads those.
+`~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`. Codex stores thread metadata
+in `~/.codex/sqlite/state_5.sqlite` and points to rollout JSONL transcripts. The
+monitor reads both provider stores and normalizes them into one session index.
 
 | Concern | Approach |
 |---|---|
-| **Summary** | Claude Code already writes an `aiTitle` per session; we use it (falling back to the first prompt). |
+| **Summary** | Uses provider titles when available, falling back to the first prompt or transcript preview. |
 | **Last updated** | The transcript file's mtime. |
 | **Usage stats** | Per-message token usage and prompt counts are read from each transcript's `usage` blocks (deduped by `requestId`), bucketed by local day, then summed into a **Today / Last 7 days / Last 30 days / All time** table of chats, messages sent, and tokens. Windows are *rolling* so they stay monotonic. The headline token number is input + cache-writes + output; cheap cache *reads* (context replays) appear only in the hover tooltip. |
-| **Active vs. inactive** | We list live `claude` processes (`ps`), resolve each one's working directory (`lsof`) and controlling tty, then match it to the newest session in that directory. A session with a live process is *active*. |
-| **Working vs. waiting** | For each active session we read its Terminal tab title (via AppleScript). Claude Code prefixes the title with an animated Braille spinner (`⠂⠄⠆…`) while it's generating and a steady `✳` when it's done and waiting for you — so the leading glyph *is* Claude's own busy state, and we just read it back. Shown as a green **working** dot vs. an amber **waiting** dot. Keyed by tty (authoritative from `ps`), so it's correct even when several sessions share one directory. Falls back to a plain **active** badge on non-Terminal terminals. |
+| **Active vs. inactive** | Claude: lists live `claude` processes (`ps`), resolves each working directory (`lsof`) and controlling tty, then matches to the newest session in that directory. Codex: liveness is not mapped yet, so Codex threads are shown from stored state and are readable as transcripts. |
+| **Working vs. waiting** | Claude-specific: for each active Claude session we read its Terminal tab title (via AppleScript). Claude Code prefixes the title with an animated Braille spinner (`⠂⠄⠆...`) while it's generating and a steady `✳` when it's done and waiting for you. Shown as a green **working** dot vs. an amber **waiting** dot. |
 | **Instant keyword search** | Filters locally as you type over title, project, prompts, and an AI-generated keyword pool. |
 | **AI keyword pool** | Generated per session by `claude -p` in the background and cached in `CSM_STATE_DIR`. |
 | **Enter → agentic search** | Hands the whole session index to `claude -p`, which ranks by intent and explains each match. |
 | **Focus window** (active) | Finds the Terminal tab whose tty matches the live process, selects it, and hands off to **yabai** to cross Mission Control spaces. |
-| **Resume** (inactive) | Opens a new Terminal window, `cd`s to the session's original directory, and runs `claude --resume <id>`. |
-| **Remote chat** (`/chat`) | Reading: tails the session transcript incrementally by byte offset. Writing: AppleScript types your message into the live TUI via its Terminal tab (keyed by tty) and submits it — the same session, same scrollback, nothing forks. Tool calls render as compact chips; working/waiting status rides along. |
+| **Resume** (inactive) | Opens a new Terminal window, `cd`s to the session's original directory, and runs the provider resume command: `claude --resume <id>` or `codex resume <thread-id>`. |
+| **Remote chat** (`/chat`) | Reading: tails the provider transcript incrementally by byte offset. Writing is only enabled when the provider supports remote send. Claude send uses AppleScript to type into the live TUI via its Terminal tab; Codex chat is read-only for now. Tool calls render as compact chips; provider badges are shown in session rows and chat headers. |
 | **Auth** (remote mode) | If `CSM_STATE_DIR/token` (or `CSM_TOKEN`) exists, every request needs it — login page sets a year-long HttpOnly cookie; `Authorization: Bearer` works for scripts; constant-time compares. No token → localhost-only behavior, no login. |
 
 Headless `claude -p` runs (`entrypoint: "sdk-cli"`) are excluded from the list, and
@@ -136,7 +142,8 @@ the monitor's own AI calls use `--no-session-persistence`, so it never indexes i
 ## Project layout
 
 - `server.py` — stdlib HTTP server + JSON API (`/api/sessions`, `/api/chat`, `/api/chat/send`, `/api/login`, `/api/focus`, `/api/resume`, `/api/search`, `/api/refresh`)
-- `sessions.py` — discover + parse transcripts (single-pass, mtime-cached, usage aggregation)
+- `sessions.py` — provider-agnostic session index (single-pass, cached, usage aggregation)
+- `providers/` — Claude and Codex adapters for discovery, parsing, capabilities, chat reads, and resume commands
 - `liveness.py` — detect which sessions are running
 - `windows.py` — focus (AppleScript + yabai) / resume (AppleScript)
 - `bridge.py` — remote chat: transcript→messages parsing + typing into the live TUI
@@ -168,9 +175,11 @@ probes reachability cheaply (cached ~10s) so it never spawns doomed calls.
 
 ## Troubleshooting
 
-- **The list is empty.** You have no transcripts under `~/.claude/projects/`, or they
-  are all headless (`entrypoint: sdk-cli`, which are excluded by design). Run an
-  interactive `claude` session and the list refreshes within a few seconds.
+- **The list is empty.** You have no enabled provider data. For Claude, check
+  `~/.claude/projects/`; headless `entrypoint: sdk-cli` runs are excluded by design.
+  For Codex, check `~/.codex/sqlite/state_5.sqlite` and that rollout paths still
+  exist. Run an interactive provider session and the list refreshes within a few
+  seconds.
 - **Port already in use.** Another instance (or the LaunchAgent) is already serving.
   Use `CSM_PORT=9000 ./run.sh`, or stop the other one.
 - **"Focus" does nothing / detail says "no Terminal tab found".** The session is not
@@ -188,9 +197,9 @@ probes reachability cheaply (cached ~10s) so it never spawns doomed calls.
 
 ## Security & privacy
 
-Runs on `127.0.0.1` by default. It reads your Claude Code transcripts locally and can
-focus or resume terminal windows — and, in remote mode, type into your live Claude
-sessions — so never put it behind a public proxy or port-forward it to the internet.
+Runs on `127.0.0.1` by default. It reads your local provider transcripts/state and can
+focus or resume terminal windows — and, for providers with remote send support, type
+into live sessions — so never put it behind a public proxy or port-forward it to the internet.
 Phone access goes through a private network (Tailscale) plus a mandatory access
 token; the full threat model and setup are in [REMOTE.md](REMOTE.md). It does not
 send your transcripts anywhere except, for the optional AI features, to the

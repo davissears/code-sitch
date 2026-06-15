@@ -21,7 +21,11 @@ body.chatpage {
 }
 .back:active { background: var(--panel2); }
 .who { flex: 1; min-width: 0; }
+.chat-titleline {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+}
 .ctitle {
+  min-width: 0;
   font-weight: 620; font-size: 14.5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -117,6 +121,7 @@ body.chatpage {
   white-space: nowrap;
 }
 .inputbar { display: flex; gap: 8px; align-items: flex-end; }
+.inputbar.readonly { opacity: .72; }
 #box {
   flex: 1; resize: none; border: 1px solid var(--line); border-radius: 18px;
   background: #0f1116; color: var(--text); outline: none;

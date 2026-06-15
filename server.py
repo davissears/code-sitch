@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-server.py — local web server for the Claude Code Situation Monitor.
+server.py — local web server for the Code Situation Monitor.
 
 Serves a single-page UI plus a small JSON API:
 
@@ -488,7 +488,7 @@ def main():
         sys.stderr.write(
             "[csm] *** WARNING: bound to %s with NO access token. Anyone who "
             "can reach this port can read transcripts and type into your "
-            "Claude sessions. Set one:  openssl rand -hex 32 > %s\n"
+            "send-capable sessions. Set one:  openssl rand -hex 32 > %s\n"
             % (HOST, TOKEN_FILE))
     try:
         httpd.serve_forever()

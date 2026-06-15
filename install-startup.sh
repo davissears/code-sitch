@@ -29,9 +29,10 @@ CLAUDE_CLI="${CSM_CLAUDE_CLI:-$(command -v claude 2>/dev/null || true)}"
 CODEX_CLI="${CSM_CODEX_CLI:-$(command -v codex 2>/dev/null || true)}"
 [ -n "$CODEX_CLI" ] || CODEX_CLI="codex"
 
-# LaunchAgents get a minimal PATH; spell out where claude/yabai/system tools live.
+# LaunchAgents get a minimal PATH; spell out where provider CLIs, yabai, and
+# system tools live.
 EXTRA=""
-for b in claude yabai; do
+for b in claude codex yabai; do
   p="$(command -v "$b" 2>/dev/null || true)"
   [ -n "$p" ] && EXTRA="$EXTRA:$(dirname "$p")"
 done

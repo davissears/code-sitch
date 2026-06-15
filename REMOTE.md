@@ -1,33 +1,35 @@
-# Remote access — chat with your Claudes from your phone
+# Remote access — chat with sessions from your phone
 
 The monitor can be reached from your phone, and every session row opens a
-**chat view**: read the conversation (including what Claude is doing right now),
-send a new prompt, and watch the reply arrive — all against the *same* session
-that's open in a terminal on your Mac. Messages you send from the phone appear
-in the terminal scrollback, so when you sit back down at the laptop you pick up
-exactly where the conversation is.
+**chat view**: read the conversation, see the provider badge, and for providers
+that support remote send, submit a new prompt against the *same* session that's
+open in a terminal on your Mac. Messages you send from the phone appear in the
+terminal scrollback, so when you sit back down at the laptop you pick up exactly
+where the conversation is.
 
 **How it works** — no new infrastructure on the sessions themselves:
 
-- *Reading*: every Claude Code conversation is already journaled to a `.jsonl`
-  transcript; the chat view tails it (incrementally, by byte offset).
-- *Writing*: Terminal.app lets us type into a tab by AppleScript, keyed by the
-  session's tty. Your message is literally typed into the live TUI and
-  submitted — exactly as if you'd walked to the laptop and typed it.
-- *Status*: the working / waiting-for-you indicator comes from the same
-  spinner-glyph signal the dashboard already uses.
+- *Reading*: Claude and Codex conversations are journaled locally; the chat view
+  tails provider transcripts incrementally by byte offset.
+- *Writing*: enabled only for providers with remote send support. Claude uses
+  Terminal.app AppleScript keyed by tty to type into the live TUI. Codex chat is
+  read-only for now because Codex liveness/send support is not mapped to Terminal
+  tabs yet.
+- *Status*: provider capabilities decide what is shown. Claude exposes active /
+  working / waiting status; Codex currently shows stored transcript state only.
 
 If a session isn't running, the chat view offers **Resume on laptop**, which
 opens a fresh terminal window on the Mac via the existing resume machinery —
-then you can chat with it remotely.
+then you can chat with it remotely if that provider supports remote send.
 
 ---
 
 ## Threat model, before anything else
 
-Anyone who can reach this server **can read every transcript and type
-arbitrary prompts into Claude sessions that may have `--dangerously-skip-
-permissions`**. That is remote code execution on your Mac, full stop. So:
+Anyone who can reach this server **can read every indexed transcript and, for
+providers that support remote send, type arbitrary prompts into sessions that may
+have reduced permission prompts**. That can become remote code execution on your
+Mac, full stop. So:
 
 1. **Never port-forward it to the open internet.** No exceptions.
 2. Reach it through a **private network (Tailscale — recommended)**, and
@@ -97,12 +99,12 @@ Cloudflare. Do **not** run a bare tunnel without Access.
 
 ## Living with it
 
-- **Send from anywhere, finish at the desk.** Phone messages are typed into
-  the real terminal; nothing forks, nothing desyncs.
+- **Send from anywhere, finish at the desk.** For send-capable providers, phone
+  messages are typed into the real terminal; nothing forks, nothing desyncs.
 - **Multi-line is fine** — newlines in your message arrive as newlines.
-  Messages starting with `/` reach Claude Code's slash-command input, so
+  For Claude, messages starting with `/` reach Claude Code's slash-command input, so
   `/compact` from the beach works (power feature; aim carefully).
-- **While Claude is working**, a sent message queues in the TUI input
+- **While the assistant is working**, a sent message queues in the TUI input
   (exactly like typing ahead at the terminal) and is processed when the
   current turn ends; it shows as a pale "pending" bubble until the transcript
   confirms it.
@@ -110,8 +112,9 @@ Cloudflare. Do **not** run a bare tunnel without Access.
   with power, `caffeinate`, or Amphetamine. Focus/resume need a logged-in GUI
   session; the screen can be locked for chatting, but resume may require the
   screen to be unlocked to open new Terminal windows.
-- Sessions running in terminals other than Apple Terminal (iTerm, Ghostty…)
-  are readable remotely but can't receive messages yet.
+- Sessions/providers without Terminal send support are readable remotely but show
+  a read-only composer. Today that includes Codex and sessions running in
+  terminals other than Apple Terminal (iTerm, Ghostty...).
 
 ## Limitations (honest ones)
 
