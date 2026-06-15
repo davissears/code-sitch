@@ -8,15 +8,16 @@ the window lives on another Mission Control space we hand the final focus to
 yabai (which can cross spaces without the scripting addition).
 
 Resume (inactive session): open a brand-new Terminal window, cd into the
-session's original cwd, and run `claude --resume <id>` so the conversation comes
-back exactly where it left off.
+session's original cwd, and run the provider's resume command so the
+conversation comes back exactly where it left off.
 
 Currently targets Apple Terminal (the terminal in use on this machine).
 """
 
 import json
-import shlex
 import subprocess
+
+import providers
 
 
 # --------------------------------------------------------------------------- #
@@ -122,19 +123,9 @@ def focus_session(info):
 # --------------------------------------------------------------------------- #
 def resume_session(meta, dangerously=False, name=None):
     """Open a new Terminal window resuming `meta`. Returns {ok, command, detail}."""
-    sid = meta["session_id"]
-    cwd = meta.get("cwd")
-
-    parts = []
-    if cwd:
-        parts.append("cd " + shlex.quote(cwd))
-    cmd = ["claude", "--resume", sid]
-    if dangerously:
-        cmd.append("--dangerously-skip-permissions")
-    if name:
-        cmd += ["--name", name]
-    parts.append(" ".join(shlex.quote(c) for c in cmd))
-    shell_cmd = " && ".join(parts)
+    provider = providers.for_meta(meta)
+    cmd_info = provider.resume_command(meta, dangerously=dangerously, name=name)
+    shell_cmd = cmd_info["shell_command"]
 
     script = '''
     tell application "Terminal"

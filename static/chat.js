@@ -1,5 +1,5 @@
 "use strict";
-/* chat.js — remote chat with one running Claude Code session.
+/* chat.js — remote chat with one running code assistant session.
    Read: poll /api/chat (incremental, by transcript byte offset).
    Write: /api/chat/send types into the live terminal; the message then echoes
    back from the transcript like any typed prompt, which confirms delivery. */
@@ -13,6 +13,7 @@ const state = {
   pending: [],           // optimistic sends awaiting transcript echo
   active: false,
   activity: null,
+  providerLabel: "session",
   firstLoad: true,
   polling: false,
 };
@@ -111,7 +112,7 @@ function setStatus(active, activity) {
   $("#box").disabled = !active;
   $("#send").disabled = !active;
   if (!active) $("#box").placeholder = "Resume the session to chat…";
-  else $("#box").placeholder = "Message this Claude…";
+  else $("#box").placeholder = "Message this " + state.providerLabel + "…";
 }
 
 // ------------------------------------------------------------- polling
@@ -123,9 +124,10 @@ async function poll() {
     if (r.status === 401) { location.reload(); return; }
     if (!r.ok) return;
     const data = await r.json();
+    state.providerLabel = data.provider_label || "session";
     $("#ctitle").textContent = data.title || "(untitled session)";
     $("#cproj").textContent = data.project || data.cwd || "";
-    document.title = (data.title || "Chat") + " · Claude Code";
+    document.title = (data.title || "Chat") + " · " + state.providerLabel;
     if (data.truncated) $("#histnote").classList.remove("hidden");
 
     const stick = nearBottom() || state.firstLoad;

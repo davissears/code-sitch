@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude Code · Situation Monitor</title>
+<title>Code Situation Monitor</title>
 <link rel="stylesheet" href="/style.css">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 </head>
@@ -14,7 +14,7 @@
       <span class="spark">✳</span>
       <div>
         <h1>Situation Monitor</h1>
-        <div class="subtitle">every Claude Code conversation on this machine</div>
+        <div class="subtitle">Claude and Codex conversations on this machine</div>
       </div>
     </div>
     <div class="stats" id="stats"></div>
@@ -23,13 +23,18 @@
   <div class="usage" id="usage"></div>
 
   <div class="searchwrap">
+    <div class="provider-tabs" id="providerTabs" role="tablist" aria-label="provider filter">
+      <button type="button" data-provider="all">All</button>
+      <button type="button" data-provider="claude">Claude</button>
+      <button type="button" data-provider="codex">Codex</button>
+    </div>
     <div class="searchbox">
       <span class="search-icon">⌕</span>
       <input id="search" type="text" autocomplete="off" spellcheck="false"
              placeholder="Filter instantly by keyword…   ↵ Enter for AI search">
       <span class="search-kbd">type to filter · ↵ AI search</span>
     </div>
-    <label class="opt" title="Resume sessions with --dangerously-skip-permissions, matching how you launch Claude">
+    <label class="opt" title="Resume Claude sessions with --dangerously-skip-permissions">
       <input type="checkbox" id="optDangerous"> skip&nbsp;permissions on resume
     </label>
   </div>
@@ -43,7 +48,7 @@
           <th class="c-status">Status</th>
           <th class="c-main">Summary</th>
           <th class="c-project">Project</th>
-          <th class="c-msgs" title="Claude's responses, including tool-use steps — not the prompts you sent">Replies</th>
+          <th class="c-msgs" title="Assistant responses, including tool-use steps — not the prompts you sent">Replies</th>
           <th class="c-time">Last updated</th>
           <th class="c-action"></th>
         </tr>

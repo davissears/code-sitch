@@ -48,6 +48,12 @@ h1{font-size:19px;margin:0;letter-spacing:.2px;font-weight:650;}
 
 /* search */
 .searchwrap{display:flex;gap:12px;align-items:center;margin-bottom:14px;}
+.provider-tabs{display:inline-flex;align-items:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--radius);padding:3px;flex:0 0 auto;}
+.provider-tabs button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;
+  padding:8px 11px;border-radius:8px;cursor:pointer;min-width:58px;}
+.provider-tabs button:hover{color:var(--text);}
+.provider-tabs button.active{background:var(--panel2);color:var(--text);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);}
 .searchbox{position:relative;flex:1;display:flex;align-items:center;
   background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   transition:border-color .15s, box-shadow .15s;}
@@ -104,6 +110,10 @@ tr.state-waiting .status{color:var(--wait);}
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
 .metaline{color:var(--muted);font-size:12px;margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .metaline .sep{color:var(--faint);}
+.provider{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);
+  border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:1px 5px;line-height:1.5;}
+.provider-codex{color:#8fb9ff;border-color:rgba(143,185,255,.24);}
+.provider-claude{color:#e0a458;border-color:rgba(224,164,88,.24);}
 .reason{color:var(--accent);font-size:12px;margin-top:3px;font-style:italic;
   display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
 mark{background:rgba(217,119,87,.28);color:#ffd9c7;border-radius:3px;padding:0 1px;}
@@ -141,6 +151,10 @@ tr:hover .chip{opacity:1;}
   .chip.focus,.chip.resume{display:none;}  /* can't reach the Mac's windows from a phone */
   .chip.chat{margin-right:0;}
   .searchwrap{flex-wrap:wrap;}
+  .provider-tabs{order:2;width:100%;}
+  .provider-tabs button{flex:1;}
+  .searchbox{order:1;width:100%;flex-basis:100%;}
+  .opt{order:3;}
   .search-kbd{display:none;}
 }
 

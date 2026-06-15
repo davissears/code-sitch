@@ -18,12 +18,12 @@ The injected message appears in the terminal scrollback and the transcript like
 any typed prompt, so picking the conversation back up at the laptop is seamless.
 """
 
-import json
-import os
 import subprocess
 
+import providers
+from providers import claude
+
 MAX_SEND_CHARS = 16000          # keep injections sane; CC handles big pastes fine
-TAIL_BYTES = 1 << 20            # first load of a huge transcript: last ~1 MB only
 
 
 # --------------------------------------------------------------------------- #
@@ -73,76 +73,18 @@ def _user_text(content):
 
 def read_chat(path, offset=0):
     """
-    Parse chat messages from a transcript, starting at byte `offset`.
+    Compatibility wrapper for Claude transcript parsing.
 
     Returns {"messages": [...], "offset": <new>, "truncated": bool}.
     Each message: {"role": "user"|"assistant"|"tool", "text", "ts", "id"}
     (tool messages add "name"). Offset 0 on a huge file reads only the tail.
     """
-    msgs, truncated = [], False
-    try:
-        size = os.path.getsize(path)
-    except OSError:
-        return {"messages": [], "offset": 0, "truncated": False}
-    if offset > size:                        # transcript rotated/shrunk — restart
-        offset = 0
-    if offset == 0 and size > TAIL_BYTES + (TAIL_BYTES >> 2):
-        offset = size - TAIL_BYTES
-        truncated = True
-
-    with open(path, "rb") as f:
-        f.seek(offset)
-        if truncated:
-            f.readline()                     # skip the partial line we landed in
-        while True:
-            pos = f.tell()
-            raw = f.readline()
-            if not raw:
-                break
-            if not raw.endswith(b"\n") and pos + len(raw) == size:
-                # a writer is mid-line; leave it for the next poll
-                return {"messages": msgs, "offset": pos, "truncated": truncated}
-            try:
-                o = json.loads(raw)
-            except Exception:
-                continue
-            if o.get("isMeta") or o.get("isSidechain"):
-                continue
-            typ = o.get("type")
-            m = o.get("message") or {}
-            ts = o.get("timestamp")
-            uid = o.get("uuid")
-            if typ == "user":
-                text = _user_text(m.get("content"))
-                if text:
-                    msgs.append({"role": "user", "text": text[:20000],
-                                 "ts": ts, "id": uid})
-            elif typ == "assistant":
-                content = m.get("content")
-                if not isinstance(content, list):
-                    continue
-                for i, b in enumerate(content):
-                    if not isinstance(b, dict):
-                        continue
-                    if b.get("type") == "text" and b.get("text", "").strip():
-                        msgs.append({"role": "assistant",
-                                     "text": b["text"][:40000],
-                                     "ts": ts, "id": "%s.%d" % (uid, i)})
-                    elif b.get("type") == "tool_use":
-                        msgs.append({"role": "tool",
-                                     "name": b.get("name") or "tool",
-                                     "text": _tool_summary(b.get("name"),
-                                                           b.get("input")),
-                                     "ts": ts, "id": "%s.%d" % (uid, i)})
-        return {"messages": msgs, "offset": f.tell(), "truncated": truncated}
+    return claude.read_chat(path, offset)
 
 
 def transcript_path(meta):
-    """Locate the .jsonl for a session meta (sessions.py keeps the path)."""
-    p = meta.get("path")
-    if p and os.path.exists(p):
-        return p
-    return None
+    """Locate the transcript for a provider-normalized session meta."""
+    return providers.for_meta(meta).transcript_path(meta)
 
 
 # --------------------------------------------------------------------------- #

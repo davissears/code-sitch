@@ -4,6 +4,7 @@ const state = {
   sessions: [],          // from /api/sessions, newest first
   byId: new Map(),
   filter: "",
+  provider: localStorage.getItem("csm_provider") || "all",
   mode: "instant",       // "instant" | "agentic"
   agentic: { query: "", results: [], loading: false, error: null },
   meta: { active_count: 0, total: 0, indexing: false, enrich: {} },
@@ -56,7 +57,7 @@ function renderUsage() {
   const table = el("table", "usage-table");
   const thead = el("thead"), htr = el("tr");
   const thPrompts = el("th", "num", "Prompts sent");
-  thPrompts.title = "Prompts you typed (excludes Claude's replies and tool-use steps)";
+  thPrompts.title = "Prompts you typed (excludes assistant replies and tool-use steps)";
   htr.append(el("th", "up", "Period"), el("th", "num", "Chats"), thPrompts, el("th", "num", "Tokens"));
   thead.append(htr);
   const tbody = el("tbody");
@@ -94,12 +95,21 @@ function tokens(q) {
   return q.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
+function providerMatches(s) {
+  return state.provider === "all" || (s.provider || "claude") === state.provider;
+}
+
+function providerSessions() {
+  return state.sessions.filter(providerMatches);
+}
+
 function instantMatches() {
   const q = state.filter.trim();
-  if (!q) return state.sessions;            // already newest-first
+  const base = providerSessions();
+  if (!q) return base;                       // already newest-first
   const terms = tokens(q);
   const scored = [];
-  for (const s of state.sessions) {
+  for (const s of base) {
     const hay = s.haystack || "";
     let ok = true, score = 0;
     for (const t of terms) {
@@ -120,7 +130,7 @@ function displayList() {
     const out = [];
     for (const r of state.agentic.results) {
       const s = state.byId.get(r.session_id);
-      if (s) out.push(Object.assign({}, s, { _reason: r.reason }));
+      if (s && providerMatches(s)) out.push(Object.assign({}, s, { _reason: r.reason }));
     }
     return out;
   }
@@ -208,6 +218,7 @@ function highlight(text, terms) {
 
 function render() {
   renderUsage();
+  renderProviderTabs();
   // stats
   const m = state.meta;
   const stats = $("#stats");
@@ -219,7 +230,7 @@ function render() {
   if (working) {
     const wk = el("span", "pill");
     wk.append(el("span", "dot live"), el("span", null, `${working} working`));
-    wk.title = "Claude is actively generating in these sessions right now";
+    wk.title = "The assistant is actively generating in these sessions right now";
     stats.append(wk);
   }
   stats.append(el("span", "pill", `${m.total || 0} sessions`));
@@ -277,8 +288,8 @@ function render() {
     const LABEL = { working: "working", waiting: "waiting", active: "active", inactive: "inactive" };
     const DOT = { working: "live", waiting: "wait", active: "live", inactive: "idle" };
     const dot = el("span", "dot " + DOT[act]);
-    if (act === "waiting") dot.title = "Claude is waiting for your input";
-    else if (act === "working") dot.title = "Claude is working right now";
+    if (act === "waiting") dot.title = "The assistant is waiting for your input";
+    else if (act === "working") dot.title = "The assistant is working right now";
     st.append(dot, el("span", null, LABEL[act]));
     tdS.append(st);
 
@@ -292,6 +303,8 @@ function render() {
       tdM.append(el("div", "reason", "↳ " + s._reason));
     } else {
       const meta = el("div", "metaline");
+      meta.append(el("span", "provider provider-" + (s.provider || "claude"), s.provider_label || s.provider || "Claude"));
+      meta.append(el("span", "sep", "·"));
       if (s.branch && s.branch !== "HEAD") { meta.append(el("span", "branch", "⎇ " + s.branch)); meta.append(el("span", "sep", "·")); }
       meta.append(el("span", null, `${s.messages} repl${s.messages === 1 ? "y" : "ies"}`));
       if (s.last_prompt) { meta.append(el("span", "sep", "·")); meta.append(el("span", null, "“" + truncate(s.last_prompt, 60) + "”")); }
@@ -304,9 +317,9 @@ function render() {
     pj.title = s.cwd || "";
     tdP.append(pj);
 
-    // replies (Claude's response events, incl. tool-use steps — not your prompts)
+    // replies (assistant response events, incl. tool-use steps — not your prompts)
     const tdC = el("td", "c-msgs msgs", String(s.messages || 0));
-    tdC.title = "Claude responses (incl. tool-use steps)";
+    tdC.title = "Assistant responses (incl. tool-use steps)";
 
     // time
     const tdT = el("td", "c-time");
@@ -347,6 +360,16 @@ function render() {
 
 function truncate(s, n) { s = s.replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
 
+function renderProviderTabs() {
+  const tabs = $("#providerTabs");
+  if (!tabs) return;
+  for (const btn of tabs.querySelectorAll("button")) {
+    const active = btn.dataset.provider === state.provider;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  }
+}
+
 // ---------------------------------------------------------------- toast
 let toastTimer = null;
 function toast(msg, kind) {
@@ -382,6 +405,13 @@ function wire() {
   $("#optDangerous").checked = localStorage.getItem("csm_dangerous") !== "0"; // default ON
   $("#optDangerous").addEventListener("change", (e) => {
     localStorage.setItem("csm_dangerous", e.target.checked ? "1" : "0");
+  });
+  $("#providerTabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-provider]");
+    if (!btn) return;
+    state.provider = btn.dataset.provider;
+    localStorage.setItem("csm_provider", state.provider);
+    render();
   });
 }
 

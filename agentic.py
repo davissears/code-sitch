@@ -3,8 +3,9 @@ agentic.py — the Enter-key "agentic" search.
 
 Instant search (as you type) is a local substring/keyword filter handled in the
 browser. When the user commits a query with Enter, we hand the whole session
-index to Claude and let it reason about which past conversations are actually
-relevant — matching intent, not just literal tokens — and explain why.
+index to the configured model and let it reason about which past conversations
+are actually relevant — matching intent, not just literal tokens — and explain
+why.
 
 This is one headless `claude` call over a compact index of every session, so it
 is fast and deterministic enough for interactive use while still being a real
@@ -29,7 +30,7 @@ def _entry(i, meta):
          meta.get("git_branch") or "-", first, last, ", ".join(kws))
 
 
-_PROMPT = """You are a search engine over a developer's archive of past Claude Code sessions.
+_PROMPT = """You are a search engine over a developer's archive of past coding assistant sessions.
 Each entry below has a number [#n], a title, project, the opening request, the last request, and keywords.
 
 Find the sessions genuinely relevant to the user's query. Match meaning and intent, not just literal words. Rank best first. Return ONLY a JSON array (no prose, no markdown) of up to 12 objects:

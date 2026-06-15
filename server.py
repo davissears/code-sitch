@@ -31,7 +31,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 import sessions
-import liveness
 import windows
 import bridge
 import keywords as kw
@@ -77,7 +76,7 @@ def live_map():
     with _live_lock:
         if now - _live_cache["at"] < LIVE_TTL:
             return _live_cache["data"]
-    data = liveness.active_sessions(INDEX.all())
+    data = sessions.active_sessions(INDEX.all())
     with _live_lock:
         _live_cache["at"] = time.time()
         _live_cache["data"] = data
@@ -100,9 +99,13 @@ def session_view(meta, active):
         (meta.get("first_prompt") or "")[:400],
         (meta.get("last_prompt") or "")[:300],
         " ".join(pool),
+        meta.get("provider_label") or meta.get("provider") or "",
     ])).lower()[:1800]
     return {
         "id": meta["session_id"],
+        "raw_id": meta.get("raw_session_id"),
+        "provider": meta.get("provider") or "claude",
+        "provider_label": meta.get("provider_label") or "Claude",
         "title": meta.get("title"),
         "project": meta.get("project"),
         "cwd": meta.get("cwd"),
@@ -297,13 +300,15 @@ class Handler(BaseHTTPRequestHandler):
             meta = INDEX.get(sid)
             if not meta:
                 return self._send(404, {"error": "unknown session"})
-            path = bridge.transcript_path(meta)
-            if not path:
+            out = sessions.read_chat(meta, offset)
+            if out is None:
                 return self._send(404, {"error": "transcript not found"})
-            out = bridge.read_chat(path, offset)
-            info = live_map().get(sid)
+            resolved_sid = meta["session_id"]
+            info = live_map().get(resolved_sid)
             out.update({
-                "session_id": sid,
+                "session_id": resolved_sid,
+                "provider": meta.get("provider") or "claude",
+                "provider_label": meta.get("provider_label") or "Claude",
                 "title": meta.get("title"),
                 "project": meta.get("project"),
                 "cwd": meta.get("cwd"),
@@ -336,7 +341,10 @@ class Handler(BaseHTTPRequestHandler):
             text = (data.get("text") or "").strip()
             if not text:
                 return self._send(400, {"ok": False, "detail": "empty message"})
-            info = live_map().get(sid)
+            meta = INDEX.get(sid)
+            if not meta:
+                return self._send(404, {"ok": False, "detail": "unknown session"})
+            info = live_map().get(meta["session_id"])
             if not info:
                 # not running: the phone UI offers Resume (which opens a fresh
                 # terminal on the laptop) and retries once it's live
@@ -347,14 +355,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if p == "/api/focus":
             sid = data.get("session_id")
+            meta = INDEX.get(sid)
+            if not meta:
+                return self._send(404, {"ok": False, "detail": "unknown session"})
             active = live_map()
-            info = active.get(sid)
+            info = active.get(meta["session_id"])
             if not info:
                 return self._send(409, {"ok": False, "detail": "session is no longer active"})
-            meta = INDEX.get(sid)
             # pass stable identifiers (session id + title) so the window match
             # doesn't depend on the volatile, animated terminal title.
-            info = {**info, "session_id": sid,
+            info = {**info, "session_id": meta["session_id"],
                     "title": (meta or {}).get("title")}
             return self._send(200, windows.focus_session(info))
 

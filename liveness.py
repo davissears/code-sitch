@@ -16,6 +16,8 @@ Returns a map: session_id -> {"pid", "tty", "cwd"}.
 
 import subprocess
 
+from providers import claude
+
 
 def _run(cmd, timeout=4):
     try:
@@ -141,78 +143,11 @@ def terminal_tabs():
 
 def active_sessions(metas):
     """
-    Given parsed session metas (each with cwd + updated mtime), return
-    {session_id: {"pid", "tty", "cwd", "activity"}} for sessions with a live
-    process.
+    Compatibility wrapper for Claude Terminal liveness.
 
-    Two signals connect a live process to a session:
-      • the terminal tab title — it carries the session's own aiTitle, so it
-        names the session exactly (used first; survives shared directories), and
-      • the working directory — a fallback when the title can't be read (a
-        non-Terminal terminal) or doesn't match.
-
-    Tab titles are the reliable signal: when several sessions share one cwd,
-    cwd+mtime alone can't tell which terminal runs which session, so "focus"
-    could land on the wrong window. Matching on the title fixes that.
+    Provider-neutral liveness aggregation lives in sessions.active_sessions().
     """
-    procs = live_claude_procs()
-    if not procs:
-        return {}
-
-    for p in procs:
-        p["cwd"] = cwd_of_pid(p["pid"])
-
-    tabs = terminal_tabs()                       # tty -> raw title
-    tty_activity = {tty: _classify_glyph(t) for tty, t in tabs.items()}
-
-    # sessions per cwd, newest first (for the cwd fallback)
-    sessions_by_cwd = {}
-    for m in metas:
-        if m.get("cwd"):
-            sessions_by_cwd.setdefault(m["cwd"], []).append(m)
-    for lst in sessions_by_cwd.values():
-        lst.sort(key=lambda m: m["updated"], reverse=True)
-
-    active = {}
-    claimed_sessions = set()
-
-    def _record(meta, proc):
-        active[meta["session_id"]] = {
-            "pid": proc["pid"],
-            "tty": proc["tty"],
-            "cwd": proc["cwd"],
-            # working | waiting | None(unknown, e.g. non-Terminal terminal)
-            "activity": tty_activity.get(proc["tty"]),
-        }
-        claimed_sessions.add(meta["session_id"])
-
-    # Pass 1 — match each process to the session named in its terminal tab title.
-    # Restrict candidates to the proc's own cwd so two same-named sessions in
-    # different directories can't cross-match.
-    unmatched = []
-    for proc in procs:
-        text = _strip_glyph(tabs.get(proc["tty"], ""))
-        hits = [m for m in sessions_by_cwd.get(proc["cwd"], [])
-                if m["session_id"] not in claimed_sessions
-                and _titles_match(m.get("title"), text)] if text else []
-        if len(hits) == 1:
-            _record(hits[0], proc)
-        else:
-            unmatched.append(proc)
-
-    # Pass 2 — fallback for processes with no readable/unique title match:
-    # assign the newest still-unclaimed session in the same cwd (best effort).
-    by_cwd = {}
-    for proc in unmatched:
-        if proc["cwd"]:
-            by_cwd.setdefault(proc["cwd"], []).append(proc)
-    for cwd, plist in by_cwd.items():
-        candidates = [m for m in sessions_by_cwd.get(cwd, [])
-                      if m["session_id"] not in claimed_sessions]
-        for proc, meta in zip(plist, candidates):
-            _record(meta, proc)
-
-    return active
+    return claude.active_sessions(metas)
 
 
 if __name__ == "__main__":
