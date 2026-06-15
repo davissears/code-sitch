@@ -106,6 +106,7 @@ def session_view(meta, active):
         "raw_id": meta.get("raw_session_id"),
         "provider": meta.get("provider") or "claude",
         "provider_label": meta.get("provider_label") or "Claude",
+        "capabilities": sessions.capabilities_for_meta(meta),
         "title": meta.get("title"),
         "project": meta.get("project"),
         "cwd": meta.get("cwd"),
@@ -204,6 +205,10 @@ def sessions_payload():
         "stats": usage_stats(metas),
         "generated_at": time.time(),
     }
+
+
+def session_capability(meta, name):
+    return bool(sessions.capabilities_for_meta(meta).get(name))
 
 
 # --------------------------------------------------------------------------- #
@@ -307,8 +312,10 @@ class Handler(BaseHTTPRequestHandler):
             info = live_map().get(resolved_sid)
             out.update({
                 "session_id": resolved_sid,
+                "raw_id": meta.get("raw_session_id"),
                 "provider": meta.get("provider") or "claude",
                 "provider_label": meta.get("provider_label") or "Claude",
+                "capabilities": sessions.capabilities_for_meta(meta),
                 "title": meta.get("title"),
                 "project": meta.get("project"),
                 "cwd": meta.get("cwd"),
@@ -344,6 +351,9 @@ class Handler(BaseHTTPRequestHandler):
             meta = INDEX.get(sid)
             if not meta:
                 return self._send(404, {"ok": False, "detail": "unknown session"})
+            if not session_capability(meta, "send"):
+                return self._send(409, {"ok": False, "unsupported": True,
+                                        "detail": "session provider does not support remote send"})
             info = live_map().get(meta["session_id"])
             if not info:
                 # not running: the phone UI offers Resume (which opens a fresh
@@ -358,6 +368,9 @@ class Handler(BaseHTTPRequestHandler):
             meta = INDEX.get(sid)
             if not meta:
                 return self._send(404, {"ok": False, "detail": "unknown session"})
+            if not session_capability(meta, "focus"):
+                return self._send(409, {"ok": False, "unsupported": True,
+                                        "detail": "session provider does not support focus"})
             active = live_map()
             info = active.get(meta["session_id"])
             if not info:
@@ -373,6 +386,9 @@ class Handler(BaseHTTPRequestHandler):
             meta = INDEX.get(sid)
             if not meta:
                 return self._send(404, {"ok": False, "detail": "unknown session"})
+            if not session_capability(meta, "resume"):
+                return self._send(409, {"ok": False, "unsupported": True,
+                                        "detail": "session provider does not support resume"})
             res = windows.resume_session(
                 meta,
                 dangerously=bool(data.get("dangerously")),

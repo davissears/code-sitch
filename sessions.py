@@ -79,6 +79,46 @@ def provider_for_meta(meta):
     return providers.for_meta(meta)
 
 
+def capabilities_for_meta(meta):
+    """Return a fresh API capabilities value for a provider meta."""
+    provider = provider_for_meta(meta)
+    if provider:
+        fn = getattr(provider, "capabilities", None)
+        if fn:
+            return fn()
+        caps = getattr(provider, "CAPABILITIES", None)
+        if isinstance(caps, dict):
+            return dict(caps)
+        if isinstance(caps, (list, tuple)):
+            return list(caps)
+    caps = meta.get("capabilities")
+    if isinstance(caps, dict):
+        return dict(caps)
+    if isinstance(caps, (list, tuple)):
+        return list(caps)
+    return {}
+
+
+def ensure_session_metadata(meta):
+    """Backfill provider metadata added after older cache entries were written."""
+    provider = provider_for_meta(meta)
+    if provider:
+        raw_fn = getattr(provider, "raw_session_id", None)
+        qualify_fn = getattr(provider, "qualify_session_id", None)
+        if "provider" not in meta:
+            meta["provider"] = provider.PROVIDER
+        if "provider_label" not in meta:
+            meta["provider_label"] = getattr(provider, "PROVIDER_LABEL", provider.PROVIDER)
+        if raw_fn and not meta.get("raw_session_id"):
+            meta["raw_session_id"] = raw_fn(meta)
+        if qualify_fn:
+            raw_id = meta.get("raw_session_id") or meta.get("session_id")
+            meta["session_id"] = qualify_fn(raw_id)
+    if "capabilities" not in meta:
+        meta["capabilities"] = capabilities_for_meta(meta)
+    return meta
+
+
 def transcript_path(meta):
     provider = provider_for_meta(meta)
     return provider.transcript_path(meta) if provider else None
@@ -118,6 +158,7 @@ class SessionIndex:
         self._load_cache()
 
     def _remember_meta(self, meta):
+        ensure_session_metadata(meta)
         sid = meta["session_id"]
         self._by_id[sid] = meta
         if meta.get("provider") == claude.PROVIDER and meta.get("raw_session_id"):

@@ -171,8 +171,14 @@ function openChat(s) {
 
 async function activate(s) {
   if (state.busy.has(s.id)) return;
+  const caps = s.capabilities || {};
   state.busy.add(s.id);
   const verb = s.active ? "focus" : "resume";
+  if (!caps[verb]) {
+    toast(`${s.provider_label || "Provider"} does not support ${verb}`, "err");
+    state.busy.delete(s.id);
+    return;
+  }
   try {
     const body = { session_id: s.id };
     if (verb === "resume") body.dangerously = $("#optDangerous").checked;
@@ -329,11 +335,22 @@ function render() {
 
     // action
     const tdA = el("td", "c-action action");
+    const caps = s.capabilities || {};
     const chat = el("span", "chip chat", "💬 chat");
     chat.title = "Chat with this session from here (works remotely)";
-    chat.onclick = (e) => { e.stopPropagation(); openChat(s); };
+    if (caps.chat === false) {
+      chat.classList.add("disabled");
+      chat.title = "Chat is not supported for this provider";
+    } else {
+      chat.onclick = (e) => { e.stopPropagation(); openChat(s); };
+    }
     const chip = el("span", "chip " + (s.active ? "focus" : "resume"),
       s.active ? "⤢ focus" : "▷ resume");
+    const action = s.active ? "focus" : "resume";
+    if (!caps[action]) {
+      chip.classList.add("disabled");
+      chip.title = `${s.provider_label || "Provider"} does not support ${action}`;
+    }
     tdA.append(chat, chip);
 
     tr.append(tdS, tdM, tdP, tdC, tdT, tdA);

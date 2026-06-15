@@ -17,6 +17,13 @@ from datetime import datetime, timezone
 
 PROVIDER = "claude"
 PROVIDER_LABEL = "Claude"
+CAPABILITIES = {
+    "chat": True,
+    "resume": True,
+    "live": True,
+    "send": True,
+    "focus": True,
+}
 
 HOME = os.path.expanduser("~")
 PROJECTS_DIR = os.path.join(HOME, ".claude", "projects")
@@ -53,6 +60,10 @@ _IDLE_GLYPH = "✳"
 def qualify_session_id(raw_session_id):
     raw = raw_session_id or ""
     return raw if raw.startswith(PROVIDER + ":") else PROVIDER + ":" + raw
+
+
+def capabilities():
+    return dict(CAPABILITIES)
 
 
 def raw_session_id(meta_or_id):
@@ -226,6 +237,7 @@ def parse_session(path):
     return {
         "provider": PROVIDER,
         "provider_label": PROVIDER_LABEL,
+        "capabilities": capabilities(),
         "session_id": qualify_session_id(raw_id),
         "raw_session_id": raw_id,
         "path": path,

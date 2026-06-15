@@ -23,4 +23,13 @@ def for_name(name):
 
 
 def for_meta(meta):
-    return for_name((meta or {}).get("provider") or claude.PROVIDER) or claude
+    meta = meta or {}
+    provider = for_name(meta.get("provider"))
+    if provider:
+        return provider
+    sid = meta.get("session_id") or ""
+    if ":" in sid:
+        provider = for_name(sid.split(":", 1)[0])
+        if provider:
+            return provider
+    return claude

@@ -15,6 +15,13 @@ from urllib.parse import quote
 
 PROVIDER = "codex"
 PROVIDER_LABEL = "Codex"
+CAPABILITIES = {
+    "chat": True,
+    "resume": True,
+    "live": False,
+    "send": False,
+    "focus": False,
+}
 
 HOME = os.path.expanduser("~")
 DB_PATH = os.path.join(HOME, ".codex", "sqlite", "state_5.sqlite")
@@ -38,9 +45,19 @@ def qualify_session_id(raw_session_id):
     return raw if raw.startswith(PROVIDER + ":") else PROVIDER + ":" + raw
 
 
+def capabilities():
+    return dict(CAPABILITIES)
+
+
 def raw_session_id(meta_or_id):
     if isinstance(meta_or_id, dict):
-        sid = meta_or_id.get("raw_session_id") or meta_or_id.get("thread_id") or meta_or_id.get("session_id") or ""
+        sid = (
+            meta_or_id.get("raw_session_id")
+            or meta_or_id.get("thread_id")
+            or meta_or_id.get("session_id")
+            or meta_or_id.get("id")
+            or ""
+        )
     else:
         sid = meta_or_id or ""
     prefix = PROVIDER + ":"
@@ -254,6 +271,7 @@ def parse_session(row):
     return {
         "provider": PROVIDER,
         "provider_label": PROVIDER_LABEL,
+        "capabilities": capabilities(),
         "session_id": qualify_session_id(thread_id),
         "raw_session_id": thread_id,
         "thread_id": thread_id,

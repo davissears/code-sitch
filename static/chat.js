@@ -14,6 +14,7 @@ const state = {
   active: false,
   activity: null,
   providerLabel: "session",
+  capabilities: {},
   firstLoad: true,
   polling: false,
 };
@@ -101,6 +102,7 @@ function matchPending(text) {
 
 function setStatus(active, activity) {
   state.active = active; state.activity = activity;
+  const caps = state.capabilities || {};
   const st = $("#cstatus"), lbl = $("#cstatelabel"), dot = st.querySelector(".dot");
   const act = active ? (activity || "active") : "inactive";
   st.className = "cstatus " + act;
@@ -109,9 +111,12 @@ function setStatus(active, activity) {
                       active: "running", inactive: "not running" }[act];
   $("#typing").classList.toggle("hidden", act !== "working");
   $("#deadbar").classList.toggle("hidden", active);
-  $("#box").disabled = !active;
-  $("#send").disabled = !active;
-  if (!active) $("#box").placeholder = "Resume the session to chat…";
+  $("#resumeBtn").disabled = caps.resume === false;
+  $("#resumeBtn").classList.toggle("hidden", caps.resume === false);
+  $("#box").disabled = !active || caps.send === false;
+  $("#send").disabled = !active || caps.send === false;
+  if (caps.send === false) $("#box").placeholder = state.providerLabel + " does not support remote send";
+  else if (!active) $("#box").placeholder = "Resume the session to chat…";
   else $("#box").placeholder = "Message this " + state.providerLabel + "…";
 }
 
@@ -125,6 +130,7 @@ async function poll() {
     if (!r.ok) return;
     const data = await r.json();
     state.providerLabel = data.provider_label || "session";
+    state.capabilities = data.capabilities || {};
     $("#ctitle").textContent = data.title || "(untitled session)";
     $("#cproj").textContent = data.project || data.cwd || "";
     document.title = (data.title || "Chat") + " · " + state.providerLabel;
